@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-results-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi # model-results는 용량이 클 수 있으므로 5Gi로 설정
+  storageClassName: csi-rbd-sc # <-- TODO: Change this to your cluster's available StorageClass if needed.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: parsed-results-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: csi-rbd-sc # <-- TODO: Change this to your cluster's available StorageClass if needed. 

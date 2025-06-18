@@ -1,0 +1,66 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Requirements
+
+## 기능 요구사항 (Functional Requirements)
+
+### F-01: 대시보드 메인 뷰
+- **설명**: 사용자는 로그인 없이 애플리케이션 접속 시 모든 평가 실행 목록을 확인할 수 있어야 한다.
+- **요소**:
+    - 전체 평가 실행 횟수, 성공/실패율 등 핵심 KPI 카드
+    - 주요 메트릭(e.g., `overall_score`)의 시계열 변화를 보여주는 트렌드 차트
+    - 전체 실행 목록을 보여주는 데이터 테이블
+
+### F-02: 실행 목록 데이터 테이블
+- **설명**: 데이터 테이블은 평가 실행 목록을 효율적으로 탐색하는 기능을 제공해야 한다.
+- **기능**:
+    - **정렬**: `model_tag`, `timestamp`, `overall_score` 등 주요 컬럼 클릭 시 오름차순/내림차순 정렬
+    - **필터링**: 모델 태그명으로 목록을 필터링
+    - **페이지네이션**: 한 페이지에 노출할 데이터 수를 조절하고 페이지를 이동
+    - **링크**: 각 행 클릭 시 해당 `run_id`의 상세 페이지로 이동
+
+### F-03: 상세 결과 뷰
+- **설명**: 특정 `run_id`에 대한 모든 상세 정보를 명확하게 확인할 수 있어야 한다.
+- **요소**:
+    - 실행 요약 정보 (모델 태그, 실행 시간, 상태 등)
+    - `deepeval_results`, `evalchemy_results` 등 그룹별로 구분된 상세 메트릭
+    - (선택) 이전 실행 결과와의 점수 비교
+
+### F-04: 반응형 UI
+- **설명**: 애플리케이션은 다양한 화면 크기에서 최적화된 레이아웃을 제공해야 한다.
+- **지원**: 데스크탑, 태블릿, 모바일 뷰포트 지원
+
+## 비기능 요구사항 (Non-Functional Requirements)
+
+### 성능 (Performance)
+- **페이지 로딩**: LCP(Largest Contentful Paint)는 3초 이내여야 한다.
+- **API 응답성**: 백엔드 API와의 통신은 1초 이내에 완료되어야 한다.
+- **렌더링 성능**: 데이터 테이블 스크롤 및 필터링 시 끊김 없는(60fps) 사용자 경험을 제공해야 한다.
+
+### 보안 (Security)
+- **컨테이너 보안**:
+    - 컨테이너는 `non-root` 사용자로 실행되어야 한다.
+    - 프로덕션 이미지는 `Trivy` 스캔을 통과해야 하며, `CRITICAL` 또는 `HIGH` 등급의 취약점이 없어야 한다.
+- **민감 정보**: API 키 등의 민감 정보는 코드에 하드코딩되지 않고 환경 변수나 Kubernetes Secret을 통해 주입되어야 한다.
+- **외부 라이브러리**: `npm audit`을 통해 의존성 취약점을 정기적으로 검사해야 한다.
+
+### 가용성 (Availability)
+- **무중단 배포**: Kubernetes의 `RollingUpdate` 전략을 사용하여 업데이트 중 서비스 중단이 없어야 한다.
+- **Health Check**: `livenessProbe`와 `readinessProbe`를 설정하여 비정상적인 Pod를 자동으로 재시작하고 트래픽을 받지 않도록 제어해야 한다.
+- **목표 가용성**: 99.9% Uptime
+
+### 확장성 (Scalability)
+- **Stateless**: 프론트엔드 서버는 상태를 갖지 않아 Kubernetes HPA(Horizontal Pod Autoscaler)를 통한 수평 확장이 용이해야 한다.
+
+### 운영 요구사항 (Operational Requirements)
+
+### CI/CD
+- **자동화**: `main` 브랜치에 코드가 병합되면 자동으로 테스트, 빌드, 이미지 푸시가 수행되어야 한다.
+- **품질 게이트**: PR 생성 시 Lint, Unit Test가 통과해야만 병합 가능해야 한다.
+
+### 모니터링 및 로깅
+- **로깅**: Nginx 접근 로그 및 에러 로그는 표준 출력(stdout/stderr)으로 전송되어 로깅 시스템(e.g., ELK, Grafana Loki)에서 수집할 수 있어야 한다.
+- **Health Endpoint**: Kubernetes Probe가 상태를 확인할 수 있는 `/healthz`와 같은 상태 확인 엔드포인트를 제공해야 한다.

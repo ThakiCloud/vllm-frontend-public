@@ -1,0 +1,95 @@
+---
+description: "TODO: add description"
+globs: 
+alwaysApply: false
+---
+# Roadmap
+
+## 프론트엔드 개발 및 배포 로드맵 (4주 계획)
+
+### Phase 1: 프로젝트 설정 및 기본 UI 구축 (W1)
+**목표**: 개발 환경 설정 및 핵심 UI 레이아웃 구현
+
+- **React 프로젝트 초기화**: Vite, Eslint, Prettier 설정
+- **기본 라우팅 설정**: React Router DOM을 이용한 페이지 라우팅 (`/`, `/detail/:run_id`)
+- **UI 라이브러리 선정 및 적용**: Material-UI 또는 Ant Design 도입
+- **공통 레이아웃 컴포넌트 개발**: 헤더, 사이드바, 푸터 등
+- **대시보드 페이지 프로토타입**: `design.mdc` 기반의 기본 레이아웃 구현
+
+**산출물**:
+- 초기 설정이 완료된 React 프로젝트 구조
+- 재사용 가능한 `Layout` 컴포넌트
+- 기본 대시보드 및 상세 페이지 라우팅 구조
+
+### Phase 2: 핵심 기능 개발 (W2)
+**목표**: 데이터 시각화 및 핵심 기능 구현
+
+- **데이터 Fetching 로직 구현**: API 연동을 위한 Mock API 및 데이터 모델 정의
+- **대시보드 페이지 개발**:
+    - `design.mdc`에 명시된 "LLM Quality Overview" 대시보드 구현
+    - 시계열 메트릭 트렌드 차트 (e.g., Recharts, Chart.js)
+    - 모델별 상세 비교 테이블
+- **상세 페이지 개발**: 특정 실행(`run_id`)에 대한 상세 결과 뷰 개발
+- **상태 관리 라이브러리 도입**: Recoil 또는 Zustand를 이용한 전역 상태 관리
+
+**산출물**:
+- Mock API를 통해 데이터를 받아오는 데이터 시각화 차트 및 테이블
+- 기능이 구현된 대시보드 및 상세 페이지
+- 상태 관리 구조 설계 및 적용
+
+### Phase 3: 컨테이너화 및 CI/CD 구축 (W3)
+**목표**: 애플리케이션의 Docker 컨테이너화 및 CI 파이프라인 구축
+
+- **Dockerfile 작성**: Multi-stage build를 활용한 프로덕션용 Docker 이미지 최적화
+- **Nginx 설정**: React 애플리케이션 정적 서빙을 위한 `nginx.conf` 작성
+- **GitHub Actions 워크플로우 개선**:
+    - **CI 트리거**: `main` 브랜치 push 및 pull request 시 자동 실행
+    - **Lint & Test**: `npm run lint`, `npm run test` 실행
+    - **Docker 이미지 빌드 및 푸시**: GHCR에 이미지 빌드 및 푸시 자동화
+    - **보안 스캔**: Trivy를 이용한 Docker 이미지 취약점 스캔 추가
+
+**산출물**:
+- 최적화된 `Dockerfile` 및 `nginx.conf`
+- CI/CD 자동화가 적용된 `.github/workflows/lint-test.yml`
+- GHCR에 저장된 프론트엔드 Docker 이미지
+
+### Phase 4: Kubernetes 배포 및 모니터링 (W4)
+**목표**: Kubernetes 클러스터에 애플리케이션 배포 및 운영 준비
+
+- **Kubernetes 매니페스트 작성/수정**:
+    - `Deployment`: 애플리케이션 배포 및 롤링 업데이트 전략 정의
+    - `Service`: 외부 트래픽을 받기 위한 ClusterIP 또는 NodePort 서비스 생성
+    - `Ingress`: (선택 사항) 도메인 연결을 위한 Ingress 리소스 정의
+    - `ConfigMap`/`Secret`: 외부 설정 및 민감 정보 관리
+- **Kustomize 도입**: 환경별(dev, staging, prod) 설정 분리
+- **배포 파이프라인(CD) 구축**: ArgoCD 연동 또는 `kubectl apply`를 이용한 배포 스크립트 작성
+- **최종 테스트 및 문서화**:
+    - E2E 테스트 및 QA
+    - 프로젝트 `README.md` 업데이트 (실행 방법, 아키텍처 등)
+    - Go-Live 체크리스트 점검
+
+**산출물**:
+- `k8s` 디렉토리 내의 최종 Kubernetes 매니페스트 파일
+- 환경별 설정 관리를 위한 `kustomize` 구조
+- 업데이트된 `README.md` 및 배포 가이드
+
+## 마일스톤
+
+| 주차 | 마일스톤 | 성공 기준 |
+|------|----------|-----------|
+| W1 | 기본 UI/UX 프로토타입 완료 | 주요 페이지 레이아웃 및 라우팅 구현 |
+| W2 | 핵심 기능 개발 완료 | 데이터 시각화 및 상호작용 기능 동작 |
+| W3 | CI 파이프라인 완성 | PR 생성 시 Lint, Test, Build, Docker 이미지 푸시 자동화 |
+| W4 | 프로덕션 배포 준비 완료 | Kubernetes에서 애플리케이션 정상 작동 및 문서화 완료 |
+
+## 위험 관리
+
+### 기술적 위험
+- **UI/UX 복잡성 증가**: 컴포넌트 기반 개발 및 Storybook을 통한 체계적 관리
+- **API 연동 지연**: Mock Service Worker(MSW)를 활용하여 백엔드 독립적 개발 진행
+- **상태 관리 복잡도**: Recoil/Zustand 등 경량 상태 관리 라이브러리로 시작, 점진적 확장
+
+### 운영적 위험
+- **K8s 설정 오류**: Kustomize를 통한 환경 분리 및 단계적 배포 (Dev → Staging → Prod)
+- **보안 취약점**: CI 파이프라인에 Trivy 등 자동 스캔 도구 통합 및 주기적 검토
+- **개발-운영 간 격차**: GitOps 원칙 준수 및 `design.mdc` 문서 기반의 공통 이해 확보

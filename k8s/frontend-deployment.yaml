@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-benchmark-frontend
+  labels:
+    app: model-benchmark-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model-benchmark-frontend
+  template:
+    metadata:
+      labels:
+        app: model-benchmark-frontend
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: model-benchmark-frontend
+        image: ghcr.io/thakicloud/vllm-eval-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: model-results-storage
+          mountPath: /usr/share/nginx/html/results/model-results
+        - name: parsed-results-storage
+          mountPath: /usr/share/nginx/html/results/parsed
+      volumes:
+      - name: model-results-storage
+        persistentVolumeClaim:
+          claimName: model-results-pvc
+      - name: parsed-results-storage
+        persistentVolumeClaim:
+          claimName: parsed-results-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-benchmark-frontend-svc
+spec:
+  selector:
+    app: model-benchmark-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
