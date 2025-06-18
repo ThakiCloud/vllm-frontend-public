@@ -115,6 +115,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ThakiCloud/vllm-manifests-public
+          token: ${{ secrets.GITHUB_TOKEN}}
           ref: main
 
       - name: 📝 Update Image Tag in Manifest
