@@ -1,5 +1,3 @@
-import React from 'react';
-
 const renderValue = (value) => {
     if (typeof value === 'object') {
         return <pre>{JSON.stringify(value, null, 2)}</pre>;
