@@ -122,7 +122,7 @@ jobs:
           IMAGE_TAG=${{ needs.build-and-push.outputs.tag }}
           MANIFEST_FILE=vllm-frontend/frontend-deployment.yaml
           echo "Updating image in $MANIFEST_FILE to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
-          sed -i "s,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}," $MANIFEST_FILE
+          sed -i "s,image: *,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}," $MANIFEST_FILE
 
       - name: 🚀 Commit and Push Changes
         uses: stefanzweifel/git-auto-commit-action@v5
