@@ -50,6 +50,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.version }}
     
     steps:
       - name: 📥 Checkout Repository
@@ -101,3 +103,32 @@ jobs:
           echo "```" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "```" >> $GITHUB_STEP_SUMMARY
+
+  update-manifest:
+    name: 🔄 Update Manifest
+    needs: [changes, build-and-push]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Manifest Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ThakiCloud/vllm-manifests-public
+          ref: main
+
+      - name: 📝 Update Image Tag in Manifest
+        run: |
+          IMAGE_TAG=${{ needs.build-and-push.outputs.tag }}
+          MANIFEST_FILE=vllm-frontend/frontend-deployment.yaml
+          echo "Updating image in $MANIFEST_FILE to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
+          sed -i "s,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}," $MANIFEST_FILE
+
+      - name: 🚀 Commit and Push Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "CI: update frontend image to ${{ needs.build-and-push.outputs.tag }}"
+          branch: main
+          commit_options: '--no-verify'
+          commit_user_name: 'yunjae-park1111'
+          commit_user_email: 'yunjae.park@thakicloud.co.kr'
