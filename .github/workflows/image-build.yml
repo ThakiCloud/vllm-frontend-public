@@ -105,30 +105,34 @@ jobs:
           echo "```" >> $GITHUB_STEP_SUMMARY
 
   update-manifest:
-    name: 🔄 Update Kubernetes Manifest
+    name: 🔄 Update Manifest in vllm-manifests-public
     needs: [build-and-push]
     if: github.event_name != 'pull_request' && needs.build-and-push.outputs.image_tag != ''
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: 📥 Checkout Repository
+      - name: 📥 Checkout Manifest Repository
         uses: actions/checkout@v4
+        with:
+          repository: ThakiCloud/vllm-manifests-public
+          # A personal access token with write access to the repository is required.
+          # Create a PAT with `repo` scope and add it as a secret named MANIFEST_PAT.
+          token: ${{ secrets.MANIFESTS_SECRET }}
+          ref: main
 
       - name: 📝 Update Image Tag in Manifest
         run: |
           IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
           IMAGE_NAME_LOWERCASE=${{ needs.build-and-push.outputs.image_name_lowercase }}
-          MANIFEST_FILE=k8s/frontend-deployment.yaml
+          MANIFEST_FILE=vllm-frontend/frontend-deployment.yaml
           echo "Updating image in $MANIFEST_FILE to ${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:$IMAGE_TAG"
-          sed -i "s|image: .*|image: ${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:${IMAGE_TAG}|" $MANIFEST_FILE
+          sed -i "s|image: ${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:.*|image: ${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:${IMAGE_TAG}|" $MANIFEST_FILE
 
       - name: 🚀 Commit and Push Changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "ci: update k8s manifest with image ${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
-          branch: ${{ github.ref_name }}
+          commit_message: "CI: update frontend image to ${{ needs.build-and-push.outputs.image_tag }}"
+          branch: main
           commit_options: '--no-verify'
           commit_user_name: 'yunjae-park1111'
           commit_user_email: 'yunjae.park@thakicloud.co.kr'
