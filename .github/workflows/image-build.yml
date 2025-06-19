@@ -62,16 +62,10 @@ jobs:
         id: set_lowercase_name
         run: echo "name=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: ⚙️ Generate predictable image tag
+      - name: ⚙️ Generate timestamp-based image tag
         id: get_tag
         run: |
-          TAG=""
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAG=${{ github.ref_name }}
-          else
-            # Sanitize branch name for tag (e.g., 'release/1.0' -> 'release-1.0')
-            TAG=$(echo ${{ github.ref_name }} | sed 's/\//-/g')
-          fi
+          TAG="release-$(date -u +'%Y%m%d-%H%M%S')"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG}"
 
