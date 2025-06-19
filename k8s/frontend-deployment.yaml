@@ -18,7 +18,7 @@ spec:
       - name: ghcr-secret
       containers:
       - name: model-benchmark-frontend
-        image: ghcr.io/thakicloud/vllm-frontend-public:main
+        image: ghcr.io/thakicloud/vllm-frontend-public:release-20250619-001047
         imagePullPolicy: Always
         ports:
         - containerPort: 80
