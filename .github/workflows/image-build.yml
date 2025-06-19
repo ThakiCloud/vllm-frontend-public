@@ -51,11 +51,24 @@ jobs:
       contents: read
       packages: write
     outputs:
-      tag: ${{ steps.meta.outputs.version }}
+      image_tag: ${{ steps.get_tag.outputs.tag }}
     
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+
+      - name: ⚙️ Generate predictable image tag
+        id: get_tag
+        run: |
+          TAG=""
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG=${{ github.ref_name }}
+          else
+            # Sanitize branch name for tag (e.g., 'release/1.0' -> 'release-1.0')
+            TAG=$(echo ${{ github.ref_name }} | sed 's/\//-/g')
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Generated tag: ${TAG}"
 
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,20 +81,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Extract Metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=,suffix=,event=branch
-            type=sha,prefix=,suffix=,event=pr
-
       - name: 🔨 Build and Push
         id: build
         uses: docker/build-push-action@v5
@@ -90,8 +89,10 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -105,31 +106,29 @@ jobs:
           echo "```" >> $GITHUB_STEP_SUMMARY
 
   update-manifest:
-    name: 🔄 Update Manifest
-    needs: [changes, build-and-push]
-    if: github.event_name != 'pull_request' && needs.changes.outputs.frontend == 'true'
+    name: 🔄 Update Kubernetes Manifest
+    needs: [build-and-push]
+    if: github.event_name != 'pull_request' && needs.build-and-push.outputs.image_tag != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: 📥 Checkout Manifest Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-        with:
-          repository: ThakiCloud/vllm-manifests-public
-          token: ${{ secrets.GITHUB_TOKEN}}
-          ref: main
 
       - name: 📝 Update Image Tag in Manifest
         run: |
-          IMAGE_TAG=${{ needs.build-and-push.outputs.tag }}
-          MANIFEST_FILE=vllm-frontend/frontend-deployment.yaml
+          IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
+          MANIFEST_FILE=k8s/frontend-deployment.yaml
           echo "Updating image in $MANIFEST_FILE to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
-          sed -i "s,image: *,image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}," $MANIFEST_FILE
+          sed -i "s|image: *|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG|" $MANIFEST_FILE
 
       - name: 🚀 Commit and Push Changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "CI: update frontend image to ${{ needs.build-and-push.outputs.tag }}"
-          branch: main
+          commit_message: "ci: update k8s manifest with image ${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
+          branch: ${{ github.ref_name }}
           commit_options: '--no-verify'
           commit_user_name: 'yunjae-park1111'
           commit_user_email: 'yunjae.park@thakicloud.co.kr'
