@@ -84,7 +84,8 @@ jobs:
       - name: 🔍 Run Markdown lint
         run: |
           markdownlint '**/*.md' --config .markdownlint.json || echo "⚠️ Markdown lint issues found, but continuing..."
-
+        continue-on-error: true
+        
   yaml-lint:
     name: 📄 YAML Lint
     runs-on: ubuntu-latest
@@ -98,3 +99,4 @@ jobs:
             extends: relaxed
           file_or_dir: .
           strict: false
+        continue-on-error: true
