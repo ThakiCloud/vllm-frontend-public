@@ -1,0 +1,100 @@
+name: CI - Lint & Test
+
+on:
+  push:
+    branches-ignore:
+      - 'main'
+      - 'hotfix/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: ⚛️ Frontend Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: 📦 Install dependencies
+        run: npm ci
+      - name: 🔍 Run ESLint
+        run: npm run lint
+      - name: 🧪 Run Tests
+        run: npm run test -- --coverage
+      - name: 🔨 Run Build
+        run: npm run build
+
+  shell-lint:
+    name: 📜 Shell Script Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      - name: 🔍 Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './'
+        continue-on-error: true
+
+  dockerfile-lint:
+    name: 🐳 Dockerfile Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      - name: 🔍 Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: 'Dockerfile'
+        continue-on-error: true
+
+  markdown-lint:
+    name: 📝 Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 📦 Install markdownlint
+        run: npm install -g markdownlint-cli
+      - name: 📝 Create markdownlint config
+        run: |
+          cat > .markdownlint.json << 'EOF'
+          {
+            "MD013": false,
+            "MD033": false,
+            "MD034": false,
+            "MD036": false,
+            "MD041": false
+          }
+          EOF
+      - name: 🔍 Run Markdown lint
+        run: |
+          markdownlint '**/*.md' --config .markdownlint.json || echo "⚠️ Markdown lint issues found, but continuing..."
+
+  yaml-lint:
+    name: 📄 YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      - name: 📦 Setup yamllint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: relaxed
+          file_or_dir: .
+          strict: false
