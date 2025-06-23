@@ -1,12 +1,9 @@
-name: 🐳 Build and Push Docker Image
+name: 🏗️ Build Frontend Image
 
 on:
   push:
     branches:
       - main
-      - 'release/*'
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
@@ -35,7 +32,7 @@ jobs:
             frontend:
               - 'src/**'
               - 'public/**'
-              - '.github/workflows/image-build.yml'
+              - '.github/workflows/frontend-build.yml'
               - 'Dockerfile'
               - 'nginx.conf'
               - 'index.html'
@@ -50,9 +47,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      image_tag: ${{ steps.get_tag.outputs.tag }}
-      image_name_lowercase: ${{ steps.set_lowercase_name.outputs.name }}
     
     steps:
       - name: 📥 Checkout Repository
@@ -63,6 +57,7 @@ jobs:
         run: echo "name=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: ⚙️ Generate timestamp-based image tag
+        if: github.event_name != 'pull_request'
         id: get_tag
         run: |
           TAG="release-$(date -u +'%Y%m%d-%H%M%S')"
@@ -82,13 +77,15 @@ jobs:
 
       - name: 🔨 Build and Push
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ steps.set_lowercase_name.outputs.name }}:${{ steps.get_tag.outputs.tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.set_lowercase_name.outputs.name }}:${{ github.sha }}
+            ${{ github.event_name != 'pull_request' && format('{0}/{1}:{2}', env.REGISTRY, steps.set_lowercase_name.outputs.name, steps.get_tag.outputs.tag) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -96,43 +93,10 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: ✅ Image Summary
+        if: github.event_name != 'pull_request'
         run: |
           echo "### 🖼️ Image Built Successfully" >> $GITHUB_STEP_SUMMARY
           echo "**Digest:** ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "```" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "```" >> $GITHUB_STEP_SUMMARY
-
-  update-manifest:
-    name: 🔄 Update Manifest in vllm-manifests-public
-    needs: [build-and-push]
-    if: github.event_name != 'pull_request' && needs.build-and-push.outputs.image_tag != ''
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 📥 Checkout Manifest Repository
-        uses: actions/checkout@v4
-        with:
-          repository: ThakiCloud/vllm-manifests-public
-          # A personal access token with write access to the repository is required.
-          # Create a PAT with `repo` scope and add it as a secret named MANIFEST_PAT.
-          token: ${{ secrets.MANIFESTS_SECRET }}
-          ref: main
-
-      - name: 📝 Update Image Tag in Manifest
-        run: |
-          IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
-          IMAGE_NAME_LOWERCASE=${{ needs.build-and-push.outputs.image_name_lowercase }}
-          MANIFEST_FILE=vllm-frontend/frontend-deployment.yaml
-          echo "Updating image in $MANIFEST_FILE to ${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:$IMAGE_TAG"
-          sed -E "s|(image:\s*).*$|\1${{ env.REGISTRY }}/${IMAGE_NAME_LOWERCASE}:${IMAGE_TAG}|" -i $MANIFEST_FILE
-
-      - name: 🚀 Commit and Push Changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "CI: update frontend image to ${{ needs.build-and-push.outputs.image_tag }}"
-          branch: main
-          commit_options: '--no-verify'
-          commit_user_name: 'yunjae-park1111'
-          commit_user_email: 'yunjae.park@thakicloud.co.kr'
+          echo "`${{ env.REGISTRY }}/${{ steps.set_lowercase_name.outputs.name }}:${{ github.sha }}`" >> $GITHUB_STEP_SUMMARY
+          echo "`${{ env.REGISTRY }}/${{ steps.set_lowercase_name.outputs.name }}:${{ steps.get_tag.outputs.tag }}`" >> $GITHUB_STEP_SUMMARY 
