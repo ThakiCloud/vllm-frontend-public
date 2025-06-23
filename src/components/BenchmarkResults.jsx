@@ -1,11 +1,26 @@
+const truncate = (str, maxLength) => {
+    if (!str || typeof str !== 'string' || str.length <= maxLength) {
+        return str;
+    }
+    return str.substring(0, maxLength) + '...';
+};
+
 const renderValue = (value) => {
     if (typeof value === 'object') {
         return <pre>{JSON.stringify(value, null, 2)}</pre>;
     }
+    
+    const stringValue = value?.toString() || '';
+
     if (typeof value === 'number' && !Number.isInteger(value)) {
-        return value.toFixed(4);
+        return <span title={stringValue}>{value.toFixed(4)}</span>;
     }
-    return value.toString();
+
+    if (stringValue.length > 40) {
+        return <span title={stringValue}>{truncate(stringValue, 40)}</span>;
+    }
+    
+    return stringValue;
 };
 
 const Card = ({ title, data }) => {
@@ -13,7 +28,17 @@ const Card = ({ title, data }) => {
         return null;
     }
 
-    const content = Object.entries(data).map(([key, value]) => {
+    const content = Object.entries(data)
+        .sort(([, aValue], [, bValue]) => {
+            const aIsObject = typeof aValue === 'object' && aValue !== null;
+            const bIsObject = typeof bValue === 'object' && bValue !== null;
+
+            if (aIsObject === bIsObject) {
+                return 0; // Keep original order for pairs of same type
+            }
+            return aIsObject ? 1 : -1; // Primitives first, then objects
+        })
+        .map(([key, value]) => {
         if (value === null || value === undefined) {
             return null;
         }
@@ -24,7 +49,7 @@ const Card = ({ title, data }) => {
         
         return (
             <div className="kv-pair" key={key}>
-                <span className="key">{key}</span>
+                <span className="key" title={key}>{truncate(key, 40)}</span>
                 <span className="value">{renderValue(value)}</span>
             </div>
         );

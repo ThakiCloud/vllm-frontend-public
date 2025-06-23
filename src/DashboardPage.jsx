@@ -3,24 +3,61 @@ import { Link } from 'react-router-dom';
 
 const getSummary = (data, fileName) => {
     const { meta, results, performance } = data;
-    const keyResult = Object.keys(results)[0]
-        ? `${Object.keys(results)[0]}: ${Object.values(results)[0].toFixed(4)}`
-        : `RPS: ${performance.throughput?.requests_per_second?.toFixed(2) || 'N/A'}`;
+
+    const benchmarkName = meta.benchmark_name;
+    const benchmarkResult = benchmarkName ? results[benchmarkName] : undefined;
+    
+    let resultScore = { key: 'N/A', value: 'N/A' };
+    if (benchmarkResult) {
+        // Heuristic to find the primary score from the results object.
+        const nonScorePatterns = [/num_/, /_err$/, /^examples$/, /^run_stats$/];
+        const potentialScoreKeys = Object.keys(benchmarkResult)
+            .filter(key => {
+                // Must be a number
+                if (typeof benchmarkResult[key] !== 'number') return false;
+                // Must not match non-score patterns
+                for (const pattern of nonScorePatterns) {
+                    if (pattern.test(key)) return false;
+                }
+                return true;
+            });
+
+        // Prioritize keys to find the most likely score.
+        const primaryScoreKey = 
+            potentialScoreKeys.find(k => k.endsWith('_avg')) || 
+            potentialScoreKeys.find(k => k.endsWith('_score')) ||
+            potentialScoreKeys.find(k => k.toLowerCase() === 'score') ||
+            potentialScoreKeys.find(k => k.toLowerCase() === 'accuracy') ||
+            potentialScoreKeys[0]; // Fallback to the first potential key
+
+        if (primaryScoreKey) {
+            resultScore = { 
+                key: primaryScoreKey.replace(/_avg|_score/g, ''), 
+                value: benchmarkResult[primaryScoreKey].toFixed(4) 
+            };
+        }
+    }
+
+    const duration = performance?.summary?.duration_sec?.toFixed(2) || 'N/A';
+    const rps = performance?.throughput?.requests_per_second?.toFixed(2) || 'N/A';
 
     return {
-        id: meta.run_id,
+        id: `${meta.run_id}-${meta.benchmark_name}`,
         fileName: fileName,
         benchmark: meta.benchmark_name,
         model: meta.model,
         timestamp: new Date(meta.timestamp).toLocaleString(),
-        keyResult: keyResult,
+        rawTimestamp: meta.timestamp,
+        resultScore,
+        duration,
+        rps,
     };
 };
 
 function DashboardPage() {
     const [allSummaries, setAllSummaries] = useState([]);
     const [filteredSummaries, setFilteredSummaries] = useState([]);
-    const [filters, setFilters] = useState({ source: 'all', tokenizer: 'all', modelId: 'all' });
+    const [filters, setFilters] = useState({ benchmark: 'all', source: 'all', tokenizer: 'all', modelId: 'all' });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -84,6 +121,7 @@ function DashboardPage() {
                 }
 
                 const validData = filesData.filter(d => d !== null);
+                validData.sort((a, b) => new Date(b.rawTimestamp) - new Date(a.rawTimestamp));
                 setAllSummaries(validData);
 
             } catch (e) {
@@ -103,10 +141,12 @@ function DashboardPage() {
     }, []);
 
     const filterOptions = useMemo(() => {
+        const benchmarks = new Set();
         const sources = new Set();
         const tokenizers = new Set();
         const modelIds = new Set();
         allSummaries.forEach(s => {
+            benchmarks.add(s.benchmark);
             if(s.model) {
                 sources.add(s.model.source);
                 tokenizers.add(s.model.tokenizer_id);
@@ -114,6 +154,7 @@ function DashboardPage() {
             }
         });
         return {
+            benchmarks: ['all', ...Array.from(benchmarks)],
             sources: ['all', ...Array.from(sources)],
             tokenizers: ['all', ...Array.from(tokenizers)],
             modelIds: ['all', ...Array.from(modelIds)],
@@ -122,7 +163,10 @@ function DashboardPage() {
     
     useEffect(() => {
         let summaries = [...allSummaries];
-
+        
+        if (filters.benchmark !== 'all') {
+            summaries = summaries.filter(s => s.benchmark === filters.benchmark);
+        }
         if (filters.source !== 'all') {
             summaries = summaries.filter(s => s.model?.source === filters.source);
         }
@@ -153,6 +197,12 @@ function DashboardPage() {
 
             <div className="filter-container">
                 <div className="filter-group">
+                    <label htmlFor="benchmark">Benchmark:</label>
+                    <select name="benchmark" id="benchmark" value={filters.benchmark} onChange={handleFilterChange} disabled={allSummaries.length === 0}>
+                        {filterOptions.benchmarks.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
                     <label htmlFor="source">Source:</label>
                     <select name="source" id="source" value={filters.source} onChange={handleFilterChange} disabled={allSummaries.length === 0}>
                         {filterOptions.sources.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -182,7 +232,9 @@ function DashboardPage() {
                         <tr>
                             <th>Benchmark</th>
                             <th>Model</th>
-                            <th>Key Result</th>
+                            <th>Score</th>
+                            <th>RPS</th>
+                            <th>Duration (s)</th>
                             <th>Timestamp</th>
                             <th>Details</th>
                         </tr>
@@ -192,7 +244,9 @@ function DashboardPage() {
                             <tr key={summary.id}>
                                 <td>{summary.benchmark}</td>
                                 <td>{summary.model?.id || 'N/A'}</td>
-                                <td>{summary.keyResult}</td>
+                                <td>{summary.resultScore.value !== 'N/A' ? `${summary.resultScore.key}: ${summary.resultScore.value}` : 'N/A'}</td>
+                                <td>{summary.rps}</td>
+                                <td>{summary.duration}</td>
                                 <td>{summary.timestamp}</td>
                                 <td>
                                     <Link to={`/results/${summary.fileName}`}>
