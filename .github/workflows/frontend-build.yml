@@ -38,6 +38,7 @@ jobs:
               - 'index.html'
               - 'package.json'
               - 'package-lock.json'
+              - 'vite.config.js'
 
   build-and-push:
     name: 🏗️ Build and Push Image
