@@ -4,53 +4,27 @@ import { Link } from 'react-router-dom';
 const getSummary = (data, fileName) => {
     const { meta, results, performance } = data;
 
-    const benchmarkName = meta.benchmark_name;
-    const benchmarkResult = benchmarkName ? results[benchmarkName] : undefined;
-    
-    let resultScore = { key: 'N/A', value: 'N/A' };
-    if (benchmarkResult) {
-        // Heuristic to find the primary score from the results object.
-        const nonScorePatterns = [/num_/, /_err$/, /^examples$/, /^run_stats$/];
-        const potentialScoreKeys = Object.keys(benchmarkResult)
-            .filter(key => {
-                // Must be a number
-                if (typeof benchmarkResult[key] !== 'number') return false;
-                // Must not match non-score patterns
-                for (const pattern of nonScorePatterns) {
-                    if (pattern.test(key)) return false;
-                }
-                return true;
-            });
-
-        // Prioritize keys to find the most likely score.
-        const primaryScoreKey = 
-            potentialScoreKeys.find(k => k.endsWith('_avg')) || 
-            potentialScoreKeys.find(k => k.endsWith('_score')) ||
-            potentialScoreKeys.find(k => k.toLowerCase() === 'score') ||
-            potentialScoreKeys.find(k => k.toLowerCase() === 'accuracy') ||
-            potentialScoreKeys[0]; // Fallback to the first potential key
-
-        if (primaryScoreKey) {
-            resultScore = { 
-                key: primaryScoreKey.replace(/_avg|_score/g, ''), 
-                value: benchmarkResult[primaryScoreKey].toFixed(4) 
-            };
-        }
-    }
-
-    const duration = performance?.summary?.duration_sec?.toFixed(2) || 'N/A';
-    const rps = performance?.throughput?.requests_per_second?.toFixed(2) || 'N/A';
+    // Extract the fields to match the API response structure
+    const pk = `${meta.timestamp}-${meta.benchmark_name}-${meta.run_id || 'None'}`;
+    const benchmark_name = meta.benchmark_name;
+    const model_id = meta.model?.id || 'N/A';
+    const source = meta.model?.source || 'N/A';
+    const timestamp = meta.timestamp;
+    const tokenizer_id = meta.model?.tokenizer_id || 'N/A';
 
     return {
-        id: `${meta.run_id}-${meta.benchmark_name}`,
+        id: pk,
         fileName: fileName,
-        benchmark: meta.benchmark_name,
+        benchmark_name: benchmark_name,
+        model_id: model_id,
+        source: source,
+        timestamp: timestamp,
+        tokenizer_id: tokenizer_id,
+        formattedTimestamp: new Date(timestamp).toLocaleString(),
+        rawTimestamp: timestamp,
+        // Keep original data structure for backward compatibility
+        benchmark: benchmark_name,
         model: meta.model,
-        timestamp: new Date(meta.timestamp).toLocaleString(),
-        rawTimestamp: meta.timestamp,
-        resultScore,
-        duration,
-        rps,
     };
 };
 
@@ -65,68 +39,52 @@ function DashboardPage() {
         const fetchResults = async () => {
             setLoading(true);
             try {
-                let filesData = [];
+                console.log("Fetching results from backend /standardized_output endpoint");
 
-                if (import.meta.env.DEV) {
-                    // --- DEVELOPMENT MODE ---
-                    // Use Vite's glob import for local development.
-                    // NOTE: This requires sample files to be present in /public/results/parsed/
-                    console.log("Running in DEV mode. Using import.meta.glob.");
-                    const resultModules = import.meta.glob('/public/results/parsed/*.json');
-                    const filePaths = Object.keys(resultModules);
+                const response = await fetch('/standardized_output');
 
-                    if (filePaths.length === 0) {
-                        setAllSummaries([]);
-                    } else {
-                        filesData = await Promise.all(
-                            filePaths.map(async (path) => {
-                                const module = await resultModules[path]();
-                                const fileName = path.split('/').pop();
-                                return getSummary(module.default, fileName);
-                            })
-                        );
-                    }
+                if (response.status === 404) {
+                    setAllSummaries([]);
+                } else if (!response.ok) {
+                    throw new Error(`Failed to fetch results: ${response.status} ${response.statusText}`);
                 } else {
-                    // --- PRODUCTION MODE ---
-                    // Fetch file list from Nginx autoindex in production.
-                    console.log("Running in PROD mode. Fetching from /results/parsed/");
-                    const response = await fetch('/results/parsed/');
+                    const results = await response.json();
+                    console.log("Received results:", results);
                     
-                    if (response.status === 404) {
+                    // Check if results is an array
+                    if (!Array.isArray(results)) {
+                        console.warn("Results is not an array:", results);
                         setAllSummaries([]);
-                    } else if (!response.ok) {
-                        throw new Error(`Failed to fetch file list: ${response.status} ${response.statusText}`);
                     } else {
-                        const fileList = await response.json();
-                        const jsonFiles = fileList.filter(file => file.name.endsWith('.json'));
-
-                        if (jsonFiles.length === 0) {
-                            setAllSummaries([]);
-                        } else {
-                            filesData = await Promise.all(
-                                jsonFiles.map(async (file) => {
-                                    try {
-                                        const fileResponse = await fetch(`/results/parsed/${file.name}`);
-                                        if (!fileResponse.ok) throw new Error(`Failed to fetch ${file.name}`);
-                                        const data = await fileResponse.json();
-                                        return getSummary(data, file.name);
-                                    } catch (e) {
-                                        console.error(`Error processing file ${file.name}:`, e);
-                                        return null;
+                        // Process each result item directly (no file fetching needed)
+                        const processedResults = results.map(result => {
+                            // Create a mock data structure that getSummary expects
+                            const mockData = {
+                                meta: {
+                                    timestamp: result.timestamp,
+                                    benchmark_name: result.benchmark_name,
+                                    run_id: result.pk.split('-').pop(), // Extract run_id from pk
+                                    model: {
+                                        id: result.model_id,
+                                        source: result.source,
+                                        tokenizer_id: result.tokenizer_id
                                     }
-                                })
-                            );
-                        }
+                                }
+                            };
+                            // Use the file_name if available, otherwise use pk as filename
+                            const fileName = result.file_name || `${result.benchmark_name}-${result.model_id}.json`;
+                            return getSummary(mockData, fileName);
+                        });
+
+                        const validData = processedResults.filter(d => d !== null);
+                        validData.sort((a, b) => new Date(b.rawTimestamp) - new Date(a.rawTimestamp));
+                        setAllSummaries(validData);
                     }
                 }
 
-                const validData = filesData.filter(d => d !== null);
-                validData.sort((a, b) => new Date(b.rawTimestamp) - new Date(a.rawTimestamp));
-                setAllSummaries(validData);
-
             } catch (e) {
-                 if (e instanceof SyntaxError) {
-                    console.warn("Could not parse file list. Assuming directory is empty or server misconfiguration.", e);
+                if (e instanceof SyntaxError) {
+                    console.warn("Could not parse results. Assuming server misconfiguration.", e);
                     setAllSummaries([]);
                 } else {
                     setError(`Failed to load benchmark results. Error: ${e.message}`);
@@ -146,12 +104,10 @@ function DashboardPage() {
         const tokenizers = new Set();
         const modelIds = new Set();
         allSummaries.forEach(s => {
-            benchmarks.add(s.benchmark);
-            if(s.model) {
-                sources.add(s.model.source);
-                tokenizers.add(s.model.tokenizer_id);
-                modelIds.add(s.model.id);
-            }
+            benchmarks.add(s.benchmark_name);
+            sources.add(s.source);
+            tokenizers.add(s.tokenizer_id);
+            modelIds.add(s.model_id);
         });
         return {
             benchmarks: ['all', ...Array.from(benchmarks)],
@@ -165,16 +121,16 @@ function DashboardPage() {
         let summaries = [...allSummaries];
         
         if (filters.benchmark !== 'all') {
-            summaries = summaries.filter(s => s.benchmark === filters.benchmark);
+            summaries = summaries.filter(s => s.benchmark_name === filters.benchmark);
         }
         if (filters.source !== 'all') {
-            summaries = summaries.filter(s => s.model?.source === filters.source);
+            summaries = summaries.filter(s => s.source === filters.source);
         }
         if (filters.tokenizer !== 'all') {
-            summaries = summaries.filter(s => s.model?.tokenizer_id === filters.tokenizer);
+            summaries = summaries.filter(s => s.tokenizer_id === filters.tokenizer);
         }
         if (filters.modelId !== 'all') {
-            summaries = summaries.filter(s => s.model?.id === filters.modelId);
+            summaries = summaries.filter(s => s.model_id === filters.modelId);
         }
 
         setFilteredSummaries(summaries);
@@ -230,11 +186,10 @@ function DashboardPage() {
                 <table className="summary-table">
                     <thead>
                         <tr>
-                            <th>Benchmark</th>
-                            <th>Model</th>
-                            <th>Score</th>
-                            <th>RPS</th>
-                            <th>Duration (s)</th>
+                            <th>Benchmark Name</th>
+                            <th>Model ID</th>
+                            <th>Source</th>
+                            <th>Tokenizer ID</th>
                             <th>Timestamp</th>
                             <th>Details</th>
                         </tr>
@@ -242,14 +197,13 @@ function DashboardPage() {
                     <tbody>
                         {filteredSummaries.map((summary) => (
                             <tr key={summary.id}>
-                                <td>{summary.benchmark}</td>
-                                <td>{summary.model?.id || 'N/A'}</td>
-                                <td>{summary.resultScore.value !== 'N/A' ? `${summary.resultScore.key}: ${summary.resultScore.value}` : 'N/A'}</td>
-                                <td>{summary.rps}</td>
-                                <td>{summary.duration}</td>
-                                <td>{summary.timestamp}</td>
+                                <td>{summary.benchmark_name}</td>
+                                <td>{summary.model_id}</td>
+                                <td>{summary.source}</td>
+                                <td>{summary.tokenizer_id}</td>
+                                <td>{summary.formattedTimestamp}</td>
                                 <td>
-                                    <Link to={`/results/${summary.fileName}`}>
+                                    <Link to={`/results/${summary.id}`}>
                                         View
                                     </Link>
                                 </td>

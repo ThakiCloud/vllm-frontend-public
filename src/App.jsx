@@ -13,7 +13,7 @@ function App() {
         <main className="App-content">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/results/:fileName" element={<DetailPage />} />
+            <Route path="/results/:pk" element={<DetailPage />} />
           </Routes>
         </main>
       </div>
