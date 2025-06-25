@@ -39,8 +39,6 @@ function DashboardPage() {
         const fetchResults = async () => {
             setLoading(true);
             try {
-                console.log("Fetching results from backend /standardized_output endpoint");
-
                 const response = await fetch('/standardized_output');
 
                 if (response.status === 404) {
@@ -49,11 +47,9 @@ function DashboardPage() {
                     throw new Error(`Failed to fetch results: ${response.status} ${response.statusText}`);
                 } else {
                     const results = await response.json();
-                    console.log("Received results:", results);
                     
                     // Check if results is an array
                     if (!Array.isArray(results)) {
-                        console.warn("Results is not an array:", results);
                         setAllSummaries([]);
                     } else {
                         // Process each result item directly (no file fetching needed)
