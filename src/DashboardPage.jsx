@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
 const getSummary = (data, fileName) => {
-    const { meta, results, performance } = data;
+    const { meta } = data;
 
     // Extract the fields to match the API response structure
     const pk = `${meta.timestamp}-${meta.benchmark_name}-${meta.run_id || 'None'}`;
