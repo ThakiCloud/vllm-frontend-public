@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/standardized_output': 'http://localhost:8000',
-      '/raw_input': 'http://localhost:8000',
+      '/standardized_output': 'http://vllm-backend:8000',
+      '/raw_input': 'http://vllm-backend:8000',
     },
   },
   test: {
