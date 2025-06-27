@@ -5,7 +5,7 @@ const getSummary = (data, fileName) => {
     const { meta } = data;
 
     // Extract the fields to match the API response structure
-    const pk = `${meta.timestamp}-${meta.benchmark_name}-${meta.run_id || 'None'}`;
+    const pk = meta.pk;
     const benchmark_name = meta.benchmark_name;
     const model_id = meta.model?.id || 'N/A';
     const source = meta.model?.source || 'N/A';
@@ -57,9 +57,9 @@ function DashboardPage() {
                             // Create a mock data structure that getSummary expects
                             const mockData = {
                                 meta: {
+                                    pk: result.pk,
                                     timestamp: result.timestamp,
                                     benchmark_name: result.benchmark_name,
-                                    run_id: result.pk.split('-').pop(), // Extract run_id from pk
                                     model: {
                                         id: result.model_id,
                                         source: result.source,
