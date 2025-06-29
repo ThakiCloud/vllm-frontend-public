@@ -282,7 +282,7 @@ export const useProjectStore = create((set, get) => ({
         file_path: fileData.file_path,
         content: fileData.content,
       };
-      
+      console.log(modifiedFileData);
       const response = await modifiedFilesApi.create(projectId, modifiedFileData);
       
       // 수정된 파일 목록 새로고침
@@ -309,7 +309,7 @@ export const useProjectStore = create((set, get) => ({
         file_path: fileData.file_path,
         content: fileData.content, // 문자열 그대로 전송
       };
-      
+      console.log(updateData);
       const response = await modifiedFilesApi.update(fileId, updateData);
       
       // 수정된 파일 목록에서 해당 파일 업데이트

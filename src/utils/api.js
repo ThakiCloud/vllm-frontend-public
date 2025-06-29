@@ -156,31 +156,15 @@ export const deployerApi_functions = {
     deployerApi.post('/jobs/logs', { job_name: jobName, namespace, tail_lines: tailLines, follow }),
   
   // 터미널 관리
-  createTerminalSession: (jobName, namespace = 'default', options = {}) => {
+  createJobTerminal: (jobName, namespace = 'default', options = {}) => {
     const payload = {
       job_name: jobName,
       namespace,
-      ...options
+      shell: options.shell || '/bin/bash',
+      ...options // pod_name, container_name 등 추가 옵션
     };
-    return deployerApi.post('/terminal/create', payload);
+    return deployerApi.post(`/jobs/${jobName}/terminal`, payload);
   },
-  
-  createJobTerminal: (jobName, namespace = 'default', shell = '/bin/bash') => 
-    deployerApi.post(`/jobs/${jobName}/terminal?namespace=${namespace}&shell=${shell}`),
-  
-  listTerminalSessions: (jobName = null) => {
-    const params = jobName ? `?job_name=${jobName}` : '';
-    return deployerApi.get(`/terminal/sessions${params}`);
-  },
-  
-  getTerminalSession: (sessionId) => 
-    deployerApi.get(`/terminal/${sessionId}`),
-  
-  deleteTerminalSession: (sessionId) => 
-    deployerApi.delete(`/terminal/${sessionId}`),
-  
-  deleteJobTerminalSessions: (jobName) => 
-    deployerApi.delete(`/terminal/job/${jobName}`),
   
   // 시스템 상태
   getHealth: () => deployerApi.get('/health'),

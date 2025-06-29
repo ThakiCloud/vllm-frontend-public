@@ -16,17 +16,12 @@ import {
   Paper,
   IconButton,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Refresh as RefreshIcon,
   Terminal as TerminalIcon,
   Download as DownloadIcon,
-  Delete as DeleteIcon,
   PlayArrow as PlayIcon,
   Stop as StopIcon,
 } from '@mui/icons-material';
@@ -42,12 +37,15 @@ const DeployerDetailPage = ({ terminal = false }) => {
   
   const [jobStatus, setJobStatus] = useState(null);
   const [logs, setLogs] = useState('');
-  const [terminalSessions, setTerminalSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tabValue, setTabValue] = useState(isTerminalMode ? 2 : 0); // 터미널 모드면 터미널 탭(2)을 기본으로
+  const [tabValue, setTabValue] = useState(isTerminalMode ? 0 : 0); // 터미널 모드면 터미널 탭(0)을 기본으로
   const [logsLoading, setLogsLoading] = useState(false);
   const [logLines, setLogLines] = useState(100);
+  
+  // 배포 정보 (YAML 내용 포함)
+  const [deploymentInfo, setDeploymentInfo] = useState(null);
+  const [deploymentLoading, setDeploymentLoading] = useState(false);
   
   // Terminal states
   const [terminalOutput, setTerminalOutput] = useState('');
@@ -60,25 +58,36 @@ const DeployerDetailPage = ({ terminal = false }) => {
   const wsRef = useRef(null);
 
   useEffect(() => {
-    fetchJobStatus();
-    fetchTerminalSessions();
-    
-    // 터미널 모드에서 session_id가 있으면 자동 연결
-    if (isTerminalMode) {
-      const searchParams = new URLSearchParams(location.search);
-      const sessionId = searchParams.get('session_id');
-      if (sessionId) {
-        // 약간의 딜레이 후 터미널 연결 (터미널 세션 목록이 로드된 후)
-        setTimeout(() => {
-          connectToTerminal(sessionId);
-        }, 1000);
+    const initializePage = async () => {
+      // 먼저 Job 상태를 가져옵니다
+      await fetchJobStatus();
+      
+      // 배포 정보도 함께 가져옵니다 (YAML 내용 포함)
+      await fetchDeploymentInfo();
+      
+      // 터미널 모드에서 session_id가 있으면 자동 연결
+      if (isTerminalMode) {
+        const searchParams = new URLSearchParams(location.search);
+        const sessionId = searchParams.get('session_id');
+        if (sessionId) {
+          // 약간의 딜레이 후 터미널 연결
+          setTimeout(() => {
+            connectToTerminal(sessionId);
+          }, 1500);
+        }
       }
-    }
+    };
+    
+    initializePage();
   }, [jobName, isTerminalMode, location.search]);
+
+
 
   useEffect(() => {
     if (tabValue === 1) {
       fetchLogs();
+    } else if (tabValue === 2) {
+      fetchDeploymentInfo();
     }
   }, [tabValue, jobName]);
 
@@ -90,6 +99,28 @@ const DeployerDetailPage = ({ terminal = false }) => {
       }
     };
   }, []);
+
+  // 터미널 출력 자동 스크롤
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [terminalOutput]);
+
+  // 터미널 포커스 유지
+  useEffect(() => {
+    const handleWindowClick = (event) => {
+      // 터미널이 연결되어 있고, 클릭이 터미널 영역 내부에서 발생했을 때
+      if (terminalConnected && terminalRef.current && terminalRef.current.contains(event.target)) {
+        terminalRef.current.focus();
+      }
+    };
+
+    if (terminalConnected) {
+      document.addEventListener('click', handleWindowClick);
+      return () => document.removeEventListener('click', handleWindowClick);
+    }
+  }, [terminalConnected]);
 
   const fetchJobStatus = async () => {
     try {
@@ -117,25 +148,69 @@ const DeployerDetailPage = ({ terminal = false }) => {
     }
   };
 
-  const fetchTerminalSessions = async () => {
+  const fetchDeploymentInfo = async () => {
     try {
-      const response = await deployerApi_functions.listTerminalSessions(jobName);
-      // 백엔드 TerminalSessionListResponse: sessions 필드를 사용
-      setTerminalSessions(response.data?.sessions || []);
+      setDeploymentLoading(true);
+      const response = await deployerApi_functions.listDeployments();
+      const deployments = response.data || [];
+      
+      // jobName과 일치하는 배포 찾기
+      const deployment = deployments.find(d => d.resource_name === jobName);
+      if (deployment) {
+        setDeploymentInfo(deployment);
+      } else {
+        setDeploymentInfo(null);
+      }
     } catch (err) {
-      console.error('Failed to fetch terminal sessions:', err);
+      console.error('배포 정보 조회 실패:', err);
+      setDeploymentInfo(null);
+    } finally {
+      setDeploymentLoading(false);
     }
   };
 
+
+
   const createTerminalSession = async () => {
     try {
-      const response = await deployerApi_functions.createJobTerminal(jobName);
+      console.log('터미널 세션 생성 시도:', {
+        jobName,
+        namespace: jobStatus?.namespace || 'default'
+      });
+
+      // Job 터미널 세션 생성 (TerminalSessionRequest 구조로 요청)
+      const response = await deployerApi_functions.createJobTerminal(
+        jobName, 
+        jobStatus?.namespace || 'default',
+        { shell: '/bin/bash' } // 추가 옵션
+      );
+      
+      // TerminalSessionResponse 구조에 맞게 처리
       const session = response.data;
+      console.log('터미널 세션 생성 성공:', session);
+      console.log('WebSocket URL:', session.websocket_url);
+      
       setCurrentSession(session);
-      await fetchTerminalSessions();
-      connectToTerminal(session.session_id);
+      
+      // 세션 ID로 터미널 연결
+      if (session?.session_id) {
+        connectToTerminal(session.session_id);
+      } else {
+        console.warn('세션 ID가 응답에 없습니다:', session);
+        alert('터미널 세션은 생성되었지만 세션 ID를 찾을 수 없습니다.');
+      }
     } catch (err) {
-      alert(`터미널 생성 실패: ${err.response?.data?.detail || err.message}`);
+      console.error('터미널 생성 오류:', err);
+      console.error('에러 상세:', err.response?.data);
+      
+      let errorMessage = '터미널 생성 실패';
+      if (err.response?.data?.detail) {
+        errorMessage += `: ${err.response.data.detail}`;
+      } else if (err.message) {
+        errorMessage += `: ${err.message}`;
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -145,61 +220,184 @@ const DeployerDetailPage = ({ terminal = false }) => {
     }
 
     try {
+      console.log('터미널 WebSocket 연결 시도:', sessionId);
       const websocket = createTerminalWebSocket(sessionId);
       wsRef.current = websocket;
       setWs(websocket);
 
       websocket.onopen = () => {
+        console.log('터미널 WebSocket 연결됨');
         setTerminalConnected(true);
-        setTerminalOutput(prev => prev + '\n=== 터미널 연결됨 ===\n');
+        setTerminalOutput(prev => prev + `\n=== 터미널 연결됨 (세션: ${sessionId.substring(0, 8)}...) ===\n`);
+        
+        // 터미널에 포커스
+        setTimeout(() => {
+          terminalRef.current?.focus();
+        }, 100);
       };
 
       websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        switch (data.type) {
-          case 'connected':
-            setTerminalOutput(prev => 
-              prev + `\n=== 연결 완료: ${data.pod_name} (${data.container_name}) ===\n`
-            );
-            break;
-          case 'output':
-          case 'error_output':
-            setTerminalOutput(prev => prev + data.data);
-            break;
-          case 'error':
-            setTerminalOutput(prev => prev + `\nERROR: ${data.message}\n`);
-            break;
+        try {
+          const data = JSON.parse(event.data);
+          console.log('터미널 메시지 수신:', data);
+          
+          switch (data.type) {
+            case 'connected':
+              setTerminalOutput(prev => 
+                prev + `\n=== 연결 완료: ${data.pod_name || 'Unknown Pod'} (${data.container_name || 'Unknown Container'}) ===\n`
+              );
+              break;
+            case 'output':
+            case 'stdout':
+              setTerminalOutput(prev => prev + data.data);
+              break;
+            case 'error_output':
+            case 'stderr':
+              setTerminalOutput(prev => prev + data.data);
+              break;
+            case 'error':
+              setTerminalOutput(prev => prev + `\nERROR: ${data.message}\n`);
+              break;
+            default:
+              console.log('알 수 없는 메시지 타입:', data.type);
+              setTerminalOutput(prev => prev + JSON.stringify(data) + '\n');
+          }
+        } catch (parseErr) {
+          console.error('메시지 파싱 오류:', parseErr);
+          setTerminalOutput(prev => prev + event.data + '\n');
         }
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
+        console.log('터미널 WebSocket 연결 종료:', event.code, event.reason);
         setTerminalConnected(false);
-        setTerminalOutput(prev => prev + '\n=== 터미널 연결 종료 ===\n');
+        setTerminalOutput(prev => prev + `\n=== 터미널 연결 종료 (코드: ${event.code}) ===\n`);
       };
 
       websocket.onerror = (error) => {
-        setTerminalOutput(prev => prev + `\n=== 연결 오류: ${error.message || 'Unknown error'} ===\n`);
+        console.error('터미널 WebSocket 오류:', error);
+        setTerminalOutput(prev => prev + `\n=== 연결 오류: ${error.message || 'WebSocket 연결 실패'} ===\n`);
       };
 
     } catch (err) {
+      console.error('터미널 연결 실패:', err);
       alert(`터미널 연결 실패: ${err.message}`);
     }
   };
 
   const sendTerminalCommand = () => {
     if (ws && terminalConnected && terminalInput.trim()) {
-      ws.send(JSON.stringify({
-        type: 'input',
-        data: terminalInput + '\n'
-      }));
-      setTerminalInput('');
+      console.log('터미널 명령 전송:', terminalInput);
+      try {
+        ws.send(JSON.stringify({
+          type: 'input',
+          data: terminalInput + '\n'
+        }));
+        setTerminalInput('');
+      } catch (err) {
+        console.error('터미널 명령 전송 오류:', err);
+        setTerminalOutput(prev => prev + `\n=== 명령 전송 실패: ${err.message} ===\n`);
+      }
     }
   };
 
-  const handleTerminalKeyPress = (event) => {
-    if (event.key === 'Enter') {
-      sendTerminalCommand();
+  const handleTerminalKeyDown = (event) => {
+    if (!terminalConnected) return;
+
+    // 터미널에 포커스 유지
+    event.preventDefault();
+
+    switch (event.key) {
+      case 'Enter':
+        if (terminalInput.trim()) {
+          sendTerminalCommand();
+        } else {
+          // 빈 엔터도 전송
+          try {
+            setTerminalOutput(prev => prev + '\n');
+            ws.send(JSON.stringify({
+              type: 'input',
+              data: '\n'
+            }));
+          } catch (err) {
+            console.error('터미널 입력 전송 오류:', err);
+          }
+        }
+        break;
+
+      case 'Backspace':
+        setTerminalInput(prev => prev.slice(0, -1));
+        break;
+
+      case 'ArrowUp':
+      case 'ArrowDown':
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        // 화살표 키는 터미널로 전송
+        try {
+          ws.send(JSON.stringify({
+            type: 'input',
+            data: `\x1b[${event.key === 'ArrowUp' ? 'A' : event.key === 'ArrowDown' ? 'B' : event.key === 'ArrowLeft' ? 'D' : 'C'}`
+          }));
+        } catch (err) {
+          console.error('화살표 키 전송 오류:', err);
+        }
+        break;
+
+      case 'Tab':
+        // Tab 키도 터미널로 전송 (자동완성)
+        try {
+          ws.send(JSON.stringify({
+            type: 'input',
+            data: '\t'
+          }));
+        } catch (err) {
+          console.error('Tab 키 전송 오류:', err);
+        }
+        break;
+
+      case 'c':
+        if (event.ctrlKey) {
+          // Ctrl+C
+          try {
+            setTerminalOutput(prev => prev + '^C\n');
+            ws.send(JSON.stringify({
+              type: 'input',
+              data: '\x03' // Ctrl+C
+            }));
+            setTerminalInput('');
+          } catch (err) {
+            console.error('Ctrl+C 전송 오류:', err);
+          }
+        } else {
+          // 일반 문자 입력
+          setTerminalInput(prev => prev + event.key);
+        }
+        break;
+
+      case 'd':
+        if (event.ctrlKey) {
+          // Ctrl+D
+          try {
+            ws.send(JSON.stringify({
+              type: 'input',
+              data: '\x04' // Ctrl+D
+            }));
+          } catch (err) {
+            console.error('Ctrl+D 전송 오류:', err);
+          }
+        } else {
+          // 일반 문자 입력
+          setTerminalInput(prev => prev + event.key);
+        }
+        break;
+
+      default:
+        // 일반 문자 입력 (길이 1인 문자만)
+        if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          setTerminalInput(prev => prev + event.key);
+        }
+        break;
     }
   };
 
@@ -211,17 +409,7 @@ const DeployerDetailPage = ({ terminal = false }) => {
     setTerminalConnected(false);
   };
 
-  const deleteTerminalSession = async (sessionId) => {
-    try {
-      await deployerApi_functions.deleteTerminalSession(sessionId);
-      await fetchTerminalSessions();
-      if (currentSession?.session_id === sessionId) {
-        disconnectTerminal();
-      }
-    } catch (err) {
-      alert(`세션 삭제 실패: ${err.response?.data?.detail || err.message}`);
-    }
-  };
+
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
@@ -274,7 +462,10 @@ const DeployerDetailPage = ({ terminal = false }) => {
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
-          onClick={fetchJobStatus}
+          onClick={() => {
+            fetchJobStatus();
+            fetchDeploymentInfo();
+          }}
         >
           새로고침
         </Button>
@@ -341,7 +532,7 @@ const DeployerDetailPage = ({ terminal = false }) => {
           <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
             <Tab label="터미널" />
             <Tab label="로그" />
-            <Tab label="세션 관리" />
+            <Tab label="YAML" />
           </Tabs>
         </Box>
 
@@ -376,6 +567,10 @@ const DeployerDetailPage = ({ terminal = false }) => {
             {/* Terminal Output */}
             <Paper 
               variant="outlined" 
+              tabIndex={0}
+              ref={terminalRef}
+              onClick={() => terminalRef.current?.focus()}
+              onKeyDown={handleTerminalKeyDown}
               sx={{ 
                 p: 2, 
                 mb: 2, 
@@ -384,36 +579,49 @@ const DeployerDetailPage = ({ terminal = false }) => {
                 backgroundColor: '#1e1e1e',
                 color: '#ffffff',
                 fontFamily: 'monospace',
-                fontSize: '14px'
+                fontSize: '14px',
+                cursor: terminalConnected ? 'text' : 'default',
+                outline: 'none',
+                '&:focus': {
+                  boxShadow: terminalConnected ? '0 0 0 2px #1976d2' : 'none'
+                }
               }}
             >
               <pre style={{ margin: 0, whiteSpace: 'pre-wrap', textAlign: 'left' }}>
                 {terminalOutput || '터미널을 연결하여 시작하세요...'}
+                {terminalConnected && (
+                  <span>
+                    {terminalInput}
+                    <span 
+                      className="terminal-cursor"
+                      style={{ 
+                        backgroundColor: '#ffffff', 
+                        color: '#1e1e1e',
+                        display: 'inline-block',
+                        width: '8px',
+                        height: '16px',
+                        marginLeft: '2px'
+                      }}
+                    >
+                      &nbsp;
+                    </span>
+                  </span>
+                )}
               </pre>
             </Paper>
 
-            {/* Terminal Input */}
-            {terminalConnected && (
-              <Box display="flex" gap={1}>
-                <TextField
-                  fullWidth
-                  value={terminalInput}
-                  onChange={(e) => setTerminalInput(e.target.value)}
-                  onKeyPress={handleTerminalKeyPress}
-                  placeholder="명령어를 입력하세요..."
-                  variant="outlined"
-                  size="small"
-                  sx={{ fontFamily: 'monospace' }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={sendTerminalCommand}
-                  disabled={!terminalInput.trim()}
-                >
-                  실행
-                </Button>
-              </Box>
-            )}
+            {/* Global CSS for terminal cursor animation */}
+            <style>
+              {`
+                @keyframes blink {
+                  0%, 50% { opacity: 1; }
+                  51%, 100% { opacity: 0; }
+                }
+                .terminal-cursor {
+                  animation: blink 1s infinite;
+                }
+              `}
+            </style>
           </CardContent>
         )}
 
@@ -469,46 +677,125 @@ const DeployerDetailPage = ({ terminal = false }) => {
           </CardContent>
         )}
 
-        {/* Sessions Tab */}
+        {/* YAML Tab */}
         {tabValue === 2 && (
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              터미널 세션 관리
-            </Typography>
-            
-            {terminalSessions.length === 0 ? (
-              <Typography color="textSecondary">
-                활성 터미널 세션이 없습니다.
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h6">
+                배포 YAML
               </Typography>
+              <Box>
+                <Button
+                  variant="outlined"
+                  onClick={fetchDeploymentInfo}
+                  disabled={deploymentLoading}
+                  sx={{ mr: 1 }}
+                >
+                  {deploymentLoading ? <CircularProgress size={20} /> : '새로고침'}
+                </Button>
+                {deploymentInfo?.yaml_content && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => {
+                      const blob = new Blob([deploymentInfo.yaml_content], { type: 'text/yaml' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${jobName}-deployment.yaml`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    다운로드
+                  </Button>
+                )}
+              </Box>
+            </Box>
+
+            {deploymentInfo ? (
+              <Box>
+                {/* 배포 메타데이터 */}
+                <Paper 
+                  variant="outlined" 
+                  sx={{ p: 2, mb: 2, backgroundColor: '#e3f2fd' }}
+                >
+                  <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+                    배포 정보
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={3}>
+                      <Typography variant="body2" color="textSecondary">
+                        배포 ID
+                      </Typography>
+                      <Typography variant="body2" fontFamily="monospace">
+                        {deploymentInfo.deployment_id || 'N/A'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <Typography variant="body2" color="textSecondary">
+                        리소스 타입
+                      </Typography>
+                      <Typography variant="body2">
+                        {deploymentInfo.resource_type || 'Unknown'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <Typography variant="body2" color="textSecondary">
+                        네임스페이스
+                      </Typography>
+                      <Typography variant="body2">
+                        {deploymentInfo.namespace || 'default'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <Typography variant="body2" color="textSecondary">
+                        생성 시간
+                      </Typography>
+                      <Typography variant="body2">
+                        {deploymentInfo.created_at 
+                          ? new Date(deploymentInfo.created_at).toLocaleString()
+                          : 'N/A'
+                        }
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+
+                {/* YAML 내용 */}
+                <Paper 
+                  variant="outlined" 
+                  sx={{ 
+                    p: 2, 
+                    height: '400px', 
+                    overflow: 'auto',
+                    backgroundColor: '#f8f9fa',
+                    fontFamily: 'monospace',
+                    fontSize: '14px'
+                  }}
+                >
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', textAlign: 'left' }}>
+                    {deploymentInfo.yaml_content || '배포 정보에 YAML 내용이 없습니다.'}
+                  </pre>
+                </Paper>
+              </Box>
             ) : (
-              <List>
-                {terminalSessions.map((session) => (
-                  <ListItem key={session.session_id} divider>
-                    <ListItemText
-                      primary={`세션 ${session.session_id.substring(0, 8)}...`}
-                      secondary={`Pod: ${session.pod_name} | Container: ${session.container_name} | 생성: ${new Date(session.created_at).toLocaleString()}`}
-                    />
-                    <ListItemSecondaryAction>
-                      <Button
-                        size="small"
-                        onClick={() => connectToTerminal(session.session_id)}
-                        sx={{ mr: 1 }}
-                      >
-                        연결
-                      </Button>
-                      <IconButton
-                        edge="end"
-                        onClick={() => deleteTerminalSession(session.session_id)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))}
-              </List>
+              <Alert severity="info">
+                <Typography variant="body2" fontWeight="medium" gutterBottom>
+                  배포 정보를 찾을 수 없습니다
+                </Typography>
+                <Typography variant="body2">
+                  이 작업({jobName})에 대한 배포 정보가 존재하지 않거나 아직 로드되지 않았습니다.
+                  '새로고침' 버튼을 클릭하여 다시 시도해보세요.
+                </Typography>
+              </Alert>
             )}
           </CardContent>
         )}
+
+
       </Card>
     </Box>
   );

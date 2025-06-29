@@ -375,12 +375,12 @@ function ProjectDetailPage() {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
           <Tab 
-            label={`Config Files (${files.config?.length || 0})`} 
+            label={`Config Files (${files.config?.length + files.modified?.filter(f => f.file_type === 'config').length || 0})`} 
             id="file-tab-0"
             aria-controls="file-tabpanel-0"
           />
           <Tab 
-            label={`Job Files (${files.job?.length || 0})`} 
+            label={`Job Files (${files.job?.length + files.modified?.filter(f => f.file_type === 'job').length || 0})`} 
             id="file-tab-1"
             aria-controls="file-tabpanel-1"
           />

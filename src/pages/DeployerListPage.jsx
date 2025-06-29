@@ -66,6 +66,12 @@ const DeployerListPage = () => {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
+  // Config 파일 관련 상태 추가
+  const [configFiles, setConfigFiles] = useState([]);
+  const [selectedConfigFile, setSelectedConfigFile] = useState('');
+  const [loadingConfigFiles, setLoadingConfigFiles] = useState(false);
+  const [originalJobYaml, setOriginalJobYaml] = useState(''); // 원본 Job YAML 저장용
+
   const defaultYaml = `apiVersion: batch/v1
 kind: Job
 metadata:
@@ -102,6 +108,16 @@ spec:
       setYamlContent(defaultYaml); // 프로젝트 선택 해제 시 기본 템플릿으로 초기화
     }
   }, [selectedProject]);
+
+  // Job 파일 선택 시 config 파일 불러오기
+  useEffect(() => {
+    if (selectedProject && selectedJobFile) {
+      fetchConfigFiles();
+    } else {
+      setConfigFiles([]);
+      setSelectedConfigFile('');
+    }
+  }, [selectedProject, selectedJobFile]);
   
   const fetchDeployments = async () => {
     try {
@@ -143,19 +159,147 @@ spec:
     }
   };
 
+  const fetchConfigFiles = async () => {
+    if (!selectedProject || !selectedJobFile) return;
+    
+    try {
+      setLoadingConfigFiles(true);
+      const response = await filesApi.list(selectedProject, 'config');
+      setConfigFiles(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch config files:', err);
+      setConfigFiles([]);
+    } finally {
+      setLoadingConfigFiles(false);
+    }
+  };
+
   const loadJobFileContent = async (fileId) => {
     try {
       const response = await filesApi.get(selectedProject, fileId);
       const fileData = response.data;
 
       // 파일 타입에 따라 적절한 내용 가져오기
+      let jobYaml = '';
       if (fileData.file_type === 'original') {
-        setYamlContent(fileData.file.content || '');
+        jobYaml = fileData.file.content || '';
       } else if (fileData.file_type === 'modified') {
-        setYamlContent(fileData.file.content || '');
+        jobYaml = fileData.file.content || '';
       }
+      
+      // 원본 Job YAML 저장
+      setOriginalJobYaml(jobYaml);
+      setYamlContent(jobYaml);
     } catch (err) {
       alert(`파일 로드 실패: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const loadConfigFileContent = async (fileId) => {
+    if (!fileId) return null;
+    
+    try {
+      const response = await filesApi.get(selectedProject, fileId);
+      const fileData = response.data;
+
+      // Config 파일 내용 반환
+      if (fileData.file_type === 'original') {
+        return fileData.file.content || '';
+      } else if (fileData.file_type === 'modified') {
+        return fileData.file.content || '';
+      }
+      return '';
+    } catch (err) {
+      console.error(`Config 파일 로드 실패: ${err.response?.data?.detail || err.message}`);
+      return null;
+    }
+  };
+
+  const generateYamlWithConfigMap = async (jobYaml, configFileId) => {
+    if (!configFileId || !jobYaml) {
+      return jobYaml;
+    }
+
+    try {
+      // Config 파일 내용 로드
+      const configContent = await loadConfigFileContent(configFileId);
+      if (!configContent) {
+        return jobYaml;
+      }
+
+      // ConfigMap YAML 생성
+      const configMapName = `eval-config-${Date.now()}`;
+      const configMap = `---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  labels:
+    app: benchmark
+data:
+  eval_config.json: |
+${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
+
+      // Job YAML 파싱 및 volume, volumeMount 추가
+      const lines = jobYaml.split('\n');
+      const modifiedLines = [];
+      let inContainerSpec = false;
+      let containerIndent = 0;
+      let volumeMountAdded = false;
+      let volumeAdded = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        modifiedLines.push(line);
+
+        // containers 섹션 찾기
+        if (line.trim().startsWith('containers:')) {
+          inContainerSpec = true;
+        }
+
+        // container 내부에서 image 라인 다음에 volumeMounts 추가
+        if (inContainerSpec && line.includes('image:') && !volumeMountAdded) {
+          // 다음 몇 라인을 확인하여 volumeMounts가 이미 있는지 체크
+          let hasVolumeMounts = false;
+          for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+            if (lines[j].includes('volumeMounts:')) {
+              hasVolumeMounts = true;
+              break;
+            }
+            if (lines[j].trim().startsWith('-') || lines[j].includes('restartPolicy:')) {
+              break;
+            }
+          }
+
+          if (!hasVolumeMounts) {
+            // 현재 들여쓰기 레벨 파악
+            const currentIndent = line.match(/^(\s*)/)[1];
+              modifiedLines.push(`${currentIndent}volumeMounts:`);
+              modifiedLines.push(`${currentIndent}- name: config-volume`);
+              modifiedLines.push(`${currentIndent}  mountPath: /app/configs`);
+              modifiedLines.push(`${currentIndent}  readOnly: true`);
+            volumeMountAdded = true;
+          }
+        }
+
+        // restartPolicy 라인 다음에 volumes 추가
+        if (line.trim().startsWith('restartPolicy:') && !volumeAdded) {
+          // 현재 들여쓰기 레벨 파악 (spec.template.spec 레벨)
+          const currentIndent = line.match(/^(\s*)/)[1];
+          modifiedLines.push(`${currentIndent}volumes:`);
+          modifiedLines.push(`${currentIndent}- name: config-volume`);
+          modifiedLines.push(`${currentIndent}  configMap:`);
+          modifiedLines.push(`${currentIndent}    name: ${configMapName}`);
+          volumeAdded = true;
+        }
+      }
+
+             // 수정된 Job과 ConfigMap을 결합 (Job 먼저, ConfigMap 뒤에)
+       return `${modifiedLines.join('\n')}\n${configMap}`;
+
+    } catch (err) {
+      console.error('YAML 생성 중 오류:', err);
+      return jobYaml;
     }
   };
 
@@ -186,6 +330,10 @@ spec:
     setSelectedProject('');
     setSelectedJobFile('');
     setJobFiles([]);
+    // Config 관련 상태 초기화
+    setConfigFiles([]);
+    setSelectedConfigFile('');
+    setOriginalJobYaml('');
     setOpenDialog(true);
   };
 
@@ -194,14 +342,37 @@ spec:
     setSelectedProject(projectId);
     setSelectedJobFile('');
     setYamlContent(defaultYaml);
+    // Config 관련 상태 초기화
+    setConfigFiles([]);
+    setSelectedConfigFile('');
+    setOriginalJobYaml('');
   };
 
   const handleJobFileSelect = async (fileId) => {
     setSelectedJobFile(fileId);
+    // Config 관련 상태 초기화
+    setSelectedConfigFile('');
+    
     if (fileId) {
       await loadJobFileContent(fileId);
     } else {
       setYamlContent(defaultYaml);
+      setOriginalJobYaml('');
+    }
+  };
+
+  const handleConfigFileSelect = async (fileId) => {
+    setSelectedConfigFile(fileId);
+    
+    if (originalJobYaml) {
+      if (fileId) {
+        // Config 파일이 선택되면 ConfigMap을 포함한 YAML 생성
+        const updatedYaml = await generateYamlWithConfigMap(originalJobYaml, fileId);
+        setYamlContent(updatedYaml);
+      } else {
+        // Config 파일 선택을 취소하면 원본 Job YAML로 되돌림
+        setYamlContent(originalJobYaml);
+      }
     }
   };
 
@@ -564,6 +735,110 @@ spec:
                   }
                 </Alert>
               )}
+
+              {/* Config 파일 선택 섹션 */}
+              {selectedProject && selectedJobFile && (
+                <Box sx={{ mt: 3 }}>
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Typography variant="h6" gutterBottom>
+                    Config 파일 선택 (선택사항)
+                  </Typography>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Config 파일을 선택하면 ConfigMap으로 생성되어 /app/config/eval_config.json 경로에 마운트됩니다.
+                  </Typography>
+
+                  {loadingConfigFiles ? (
+                    <Box display="flex" justifyContent="center" my={2}>
+                      <CircularProgress size={24} />
+                      <Typography sx={{ ml: 1 }}>Config 파일 로딩 중...</Typography>
+                    </Box>
+                  ) : configFiles.length === 0 ? (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      이 프로젝트에는 config 파일이 없습니다.
+                    </Alert>
+                  ) : (
+                    <Box sx={{ maxHeight: '200px', overflow: 'auto', mb: 2 }}>
+                      {/* Config 파일 선택 안함 옵션 */}
+                      <Paper
+                        sx={{
+                          p: 2,
+                          mb: 1,
+                          cursor: 'pointer',
+                          border: selectedConfigFile === '' ? 2 : 1,
+                          borderColor: selectedConfigFile === '' ? 'primary.main' : 'divider',
+                          backgroundColor: selectedConfigFile === '' ? 'action.selected' : 'background.paper',
+                          '&:hover': {
+                            backgroundColor: 'action.hover'
+                          }
+                        }}
+                        onClick={() => handleConfigFileSelect('')}
+                      >
+                        <Box display="flex" alignItems="center">
+                          <FileIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              Config 파일 사용 안함
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              기본 Job만 배포합니다
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Paper>
+
+                      {/* 실제 config 파일들 */}
+                      {configFiles.map((file) => (
+                        <Paper
+                          key={file.file_id}
+                          sx={{
+                            p: 2,
+                            mb: 1,
+                            cursor: 'pointer',
+                            border: selectedConfigFile === file.file_id ? 2 : 1,
+                            borderColor: selectedConfigFile === file.file_id ? 'primary.main' : 'divider',
+                            backgroundColor: selectedConfigFile === file.file_id ? 'action.selected' : 'background.paper',
+                            '&:hover': {
+                              backgroundColor: 'action.hover'
+                            }
+                          }}
+                          onClick={() => handleConfigFileSelect(file.file_id)}
+                        >
+                          <Box display="flex" alignItems="center">
+                            <FileIcon 
+                              sx={{ 
+                                mr: 1, 
+                                color: file.source === 'modified' ? 'warning.main' : 'secondary.main' 
+                              }} 
+                            />
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {file.file_path}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {file.source === 'modified' ? '수정된 파일' : '원본 파일'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Paper>
+                      ))}
+                    </Box>
+                  )}
+
+                  {selectedConfigFile && (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <Typography variant="body2" fontWeight="medium" gutterBottom>
+                        ✅ Config 파일이 선택되었습니다
+                      </Typography>
+                      <Typography variant="body2">
+                        선택한 config 파일이 ConfigMap으로 생성되어 컨테이너의 /app/config/eval_config.json 경로에 마운트됩니다.
+                        오른쪽 YAML 미리보기에서 ConfigMap과 volumeMount 설정을 확인할 수 있습니다.
+                      </Typography>
+                    </Alert>
+                  )}
+                </Box>
+              )}
             </Grid>
 
             {/* 오른쪽: YAML 내용 (읽기 전용) */}
@@ -573,10 +848,19 @@ spec:
                   YAML 내용 미리보기
                 </Typography>
                 {selectedProject && selectedJobFile && (
-                  <Typography variant="body2" color="text.secondary">
-                    {jobFiles.find(f => f.file_id === selectedJobFile)?.file_name || '선택된 파일'}
-                    {jobFiles.find(f => f.file_id === selectedJobFile)?.file_type === 'modified' && ' (수정된 파일)'}
-                  </Typography>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Job: {jobFiles.find(f => f.file_id === selectedJobFile)?.file_name || '선택된 파일'}
+                      {jobFiles.find(f => f.file_id === selectedJobFile)?.file_type === 'modified' && ' (수정된 파일)'}
+                    </Typography>
+                    {selectedConfigFile && (
+                      <Typography variant="body2" color="text.secondary">
+                        Config: {configFiles.find(f => f.file_id === selectedConfigFile)?.file_name || '선택된 Config 파일'}
+                        {configFiles.find(f => f.file_id === selectedConfigFile)?.file_type === 'modified' && ' (수정된 파일)'}
+                        → ConfigMap + VolumeMount 포함
+                      </Typography>
+                    )}
+                  </Box>
                 )}
                 {!selectedProject && (
                   <Typography variant="body2" color="text.secondary">
