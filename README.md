@@ -9,9 +9,10 @@
 
 ## ✨ Features
 
-### 📊 Dual Dashboard System
+### 📊 Triple Dashboard System
 - **Benchmark Results Dashboard**: View and analyze model benchmark results with Material-UI components
 - **Project Manager**: Manage GitHub repository benchmark configurations with modern UI
+- **Benchmark Deployer**: Deploy and manage Kubernetes benchmark jobs with real-time terminal access
 
 ### 🔗 GitHub Integration
 - **Repository Sync**: Automatic synchronization with GitHub repositories
@@ -23,6 +24,12 @@
 - **JSON Validation**: Real-time JSON syntax validation and formatting
 - **File Comparison**: Side-by-side comparison of original vs modified content
 - **Custom Files**: Create custom configuration files based on originals
+
+### 🚀 Kubernetes Integration
+- **YAML Deployment**: Deploy Kubernetes Jobs, Deployments, Services via web UI
+- **Real-time Terminal**: WebSocket-based terminal access to running pods
+- **Log Streaming**: Real-time log viewing and download capabilities
+- **Session Management**: Multi-session terminal support with automatic cleanup
 
 ### 🎨 Modern UI/UX
 - **Material Design**: Clean and intuitive Material-UI v5 components
@@ -42,7 +49,9 @@ src/
 ├── pages/               # Page components  
 │   ├── ProjectListPage.jsx    # Project listing with Material-UI cards
 │   ├── ProjectDetailPage.jsx  # Project details with tabs
-│   └── FileEditPage.jsx       # Monaco editor for file editing
+│   ├── FileEditPage.jsx       # Monaco editor for file editing
+│   ├── DeployerListPage.jsx   # Kubernetes deployment listing
+│   └── DeployerDetailPage.jsx # Deployment details with terminal
 ├── store/               # State management
 │   └── projectStore.js  # Zustand store for project data
 ├── utils/               # Utilities
@@ -56,8 +65,11 @@ src/
 
 ### Prerequisites
 - Node.js 18+ and npm
-- Backend API running on `http://localhost:8000` (for project management)
-- Benchmark results API (same server or separate)
+- Backend APIs:
+  - Benchmark Results API on `http://localhost:8000` (for benchmark data)
+  - Project Management API on `http://localhost:8001` (for GitHub integration)
+  - Benchmark Deployer API on `http://localhost:8002` (for Kubernetes deployment)
+- Kubernetes cluster access (for deployment features)
 
 ### Installation
 ```bash
@@ -105,7 +117,7 @@ GET /raw_input/{pk}            # Get raw JSON data
 
 ### Project Management API (신규)
 ```javascript
-// Uses http://localhost:8000 or configured URL
+// Uses http://localhost:8001 or configured URL
 GET    /projects/              # List all projects
 POST   /projects/              # Create new project
 GET    /projects/{id}/         # Get project details
@@ -118,6 +130,22 @@ GET    /projects/{id}/files/{file_id}/              # Get file content
 POST   /projects/{id}/files/                        # Create custom file
 PUT    /projects/{id}/files/{file_id}/              # Update file
 DELETE /projects/{id}/files/{file_id}/              # Delete file
+```
+
+### Benchmark Deployer API (신규)
+```javascript
+// Uses http://localhost:8002 or configured URL
+POST   /deploy                 # Deploy YAML to Kubernetes
+POST   /delete                 # Delete Kubernetes resources  
+GET    /deployments            # List active deployments
+GET    /health                 # Service health check
+
+GET    /jobs/{name}/status     # Get job status
+GET    /jobs/{name}/logs       # Get job logs
+POST   /jobs/{name}/terminal   # Create terminal session
+WS     /terminal/{session_id}  # WebSocket terminal connection
+GET    /terminal/sessions      # List terminal sessions
+DELETE /terminal/{session_id}  # Stop terminal session
 ```
 
 ## 🛠️ Configuration
@@ -153,6 +181,12 @@ The API clients are separated in `src/utils/api.js`:
 2. **Sync Repository**: Real-time status indicators
 3. **File Management**: Tabs for config/job files with Material-UI cards
 4. **Monaco Editor**: Full-featured code editor with JSON support
+
+### Benchmark Deployer (신규 기능)
+1. **YAML Deployment**: Deploy Kubernetes resources with web-based YAML editor
+2. **Real-time Terminal**: WebSocket-based terminal access to running pods
+3. **Log Management**: View, stream, and download container logs
+4. **Session Control**: Manage multiple terminal sessions with auto-cleanup
 
 ## 🎯 Key Improvements
 

@@ -52,6 +52,10 @@ const PROJECT_API_BASE_URL = isDevelopment
   ? 'http://localhost:8001'   // 개발환경: 직접 접근  
   : '/manage';                   // 프로덕션: nginx에서 /api/* → 8001포트 프록시
 
+const DEPLOYER_API_BASE_URL = isDevelopment 
+  ? 'http://localhost:8002'   // 개발환경: 직접 접근
+  : '/deploy';                       // 프로덕션: nginx에서 /deploy/* → 8002포트 프록시
+
 // Benchmark Results API Client (기존)
 export const benchmarkApi = axios.create({
   baseURL: BENCHMARK_API_BASE_URL,
@@ -63,6 +67,14 @@ export const benchmarkApi = axios.create({
 // Project Management API Client (신규)
 export const projectApi = axios.create({
   baseURL: PROJECT_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Benchmark Deployer API Client (신규)
+export const deployerApi = axios.create({
+  baseURL: DEPLOYER_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -120,6 +132,77 @@ export const modifiedFilesApi = {
   
   // 프로젝트의 모든 Modified files 삭제 (리셋)
   deleteAll: (projectId) => projectApi.delete(`/projects/${projectId}/modified-files`),
+};
+
+// Benchmark Deployer API (신규 배포 및 터미널 관리용)
+export const deployerApi_functions = {
+  // 배포 관리
+  deploy: (yamlContent, namespace = 'default') => 
+    deployerApi.post('/deploy', { yaml_content: yamlContent, namespace }),
+  
+  deleteDeployment: (yamlContent, namespace = 'default') => 
+    deployerApi.post('/delete', { yaml_content: yamlContent, namespace }),
+  
+  listDeployments: () => deployerApi.get('/deployments'),
+  
+  // 작업 관리
+  getJobStatus: (jobName, namespace = 'default') => 
+    deployerApi.get(`/jobs/${jobName}/status?namespace=${namespace}`),
+  
+  getJobLogs: (jobName, namespace = 'default', lines = 100) => 
+    deployerApi.get(`/jobs/${jobName}/logs?namespace=${namespace}&tail_lines=${lines}`),
+  
+  getJobLogsDetailed: (jobName, namespace, tailLines, follow) => 
+    deployerApi.post('/jobs/logs', { job_name: jobName, namespace, tail_lines: tailLines, follow }),
+  
+  // 터미널 관리
+  createTerminalSession: (jobName, namespace = 'default', options = {}) => {
+    const payload = {
+      job_name: jobName,
+      namespace,
+      ...options
+    };
+    return deployerApi.post('/terminal/create', payload);
+  },
+  
+  createJobTerminal: (jobName, namespace = 'default', shell = '/bin/bash') => 
+    deployerApi.post(`/jobs/${jobName}/terminal?namespace=${namespace}&shell=${shell}`),
+  
+  listTerminalSessions: (jobName = null) => {
+    const params = jobName ? `?job_name=${jobName}` : '';
+    return deployerApi.get(`/terminal/sessions${params}`);
+  },
+  
+  getTerminalSession: (sessionId) => 
+    deployerApi.get(`/terminal/${sessionId}`),
+  
+  deleteTerminalSession: (sessionId) => 
+    deployerApi.delete(`/terminal/${sessionId}`),
+  
+  deleteJobTerminalSessions: (jobName) => 
+    deployerApi.delete(`/terminal/job/${jobName}`),
+  
+  // 시스템 상태
+  getHealth: () => deployerApi.get('/health'),
+  getStatus: () => deployerApi.get('/status'),
+};
+
+// WebSocket 연결 유틸리티
+export const createTerminalWebSocket = (sessionId, baseUrl = null) => {
+  let wsBaseUrl;
+  
+  if (baseUrl) {
+    wsBaseUrl = baseUrl;
+  } else if (isDevelopment) {
+    wsBaseUrl = 'ws://localhost:8002';
+  } else {
+    // 프로덕션 환경에서는 현재 프로토콜에 따라 ws/wss 결정
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsBaseUrl = `${protocol}//${window.location.host}/deploy`;
+  }
+  
+  const url = `${wsBaseUrl}/terminal/${sessionId}`;
+  return new WebSocket(url);
 };
 
 // Default export for backward compatibility

@@ -12,6 +12,8 @@ import DetailPage from './DetailPage';
 import ProjectListPage from './pages/ProjectListPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import FileEditPage from './pages/FileEditPage';
+import DeployerListPage from './pages/DeployerListPage';
+import DeployerDetailPage from './pages/DeployerDetailPage';
 import './App.css';
 
 // Create Material-UI theme
@@ -66,6 +68,11 @@ function App() {
             <Route path="/projects" element={<ProjectListPage />} />
             <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="/projects/:projectId/files/:fileId/edit" element={<FileEditPage />} />
+            
+            {/* Deployer Routes */}
+            <Route path="/deployer" element={<DeployerListPage />} />
+            <Route path="/deployer/:jobName" element={<DeployerDetailPage />} />
+            <Route path="/deployer/:jobName/terminal" element={<DeployerDetailPage terminal={true} />} />
             
             {/* Settings Route (placeholder) */}
             <Route path="/settings" element={
