@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 env:
   REGISTRY: ghcr.io
@@ -32,13 +29,10 @@ jobs:
             frontend:
               - 'src/**'
               - 'public/**'
-              - '.github/workflows/frontend-build.yml'
               - 'Dockerfile'
               - 'nginx.conf'
-              - 'index.html'
               - 'package.json'
               - 'package-lock.json'
-              - 'vite.config.js'
 
   build-and-push:
     name: 🏗️ Build and Push Image
