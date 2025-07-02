@@ -56,8 +56,24 @@ function DetailPage() {
             setRawJsonData(response.data);
             setJsonModalOpen(true);
         } catch (error) {
-            // Fallback to direct URL
-            window.open(`/raw_input/${pk}`, '_blank');
+            // Fallback: try to fetch directly from the raw_input endpoint
+            try {
+                const fallbackResponse = await fetch(`/raw_input/${pk}`);
+
+                if (fallbackResponse.ok) {
+                    const fallbackData = await fallbackResponse.json();
+                    setRawJsonData(fallbackData);
+                    setJsonModalOpen(true);
+                } else {
+                    // If both methods fail, show error in modal
+                    setRawJsonData({ error: 'Failed to load raw JSON data' });
+                    setJsonModalOpen(true);
+                }
+            } catch (fallbackError) {
+                // If both methods fail, show error in modal
+                setRawJsonData({ error: 'Failed to load raw JSON data' });
+                setJsonModalOpen(true);
+            }
         } finally {
             setJsonLoading(false);
         }

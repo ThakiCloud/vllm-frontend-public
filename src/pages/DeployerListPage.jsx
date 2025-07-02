@@ -123,7 +123,6 @@ spec:
     try {
       setLoading(true);
       const response = await deployerApi_functions.listDeployments();
-      console.log(response.data);
       setDeployments(response.data || []);
     } catch (err) {
       setError(err.response?.data?.detail || err.message);
@@ -137,9 +136,7 @@ spec:
       setLoadingProjects(true);
       const response = await projectsApi.list();
       setProjects(response.data || []);
-    } catch (err) {
-      console.error('Failed to fetch projects:', err);
-    } finally {
+    } catch (err) {} finally {
       setLoadingProjects(false);
     }
   };
@@ -152,7 +149,6 @@ spec:
       const response = await filesApi.list(selectedProject, 'job');
       setJobFiles(response.data || []);
     } catch (err) {
-      console.error('Failed to fetch job files:', err);
       setJobFiles([]);
     } finally {
       setLoadingFiles(false);
@@ -167,7 +163,6 @@ spec:
       const response = await filesApi.list(selectedProject, 'config');
       setConfigFiles(response.data || []);
     } catch (err) {
-      console.error('Failed to fetch config files:', err);
       setConfigFiles([]);
     } finally {
       setLoadingConfigFiles(false);
@@ -210,7 +205,6 @@ spec:
       }
       return '';
     } catch (err) {
-      console.error(`Config 파일 로드 실패: ${err.response?.data?.detail || err.message}`);
       return null;
     }
   };
@@ -298,7 +292,6 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
        return `${modifiedLines.join('\n')}\n${configMap}`;
 
     } catch (err) {
-      console.error('YAML 생성 중 오류:', err);
       return jobYaml;
     }
   };

@@ -162,7 +162,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
         setDeploymentInfo(null);
       }
     } catch (err) {
-      console.error('배포 정보 조회 실패:', err);
       setDeploymentInfo(null);
     } finally {
       setDeploymentLoading(false);
@@ -173,11 +172,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
 
   const createTerminalSession = async () => {
     try {
-      console.log('터미널 세션 생성 시도:', {
-        jobName,
-        namespace: jobStatus?.namespace || 'default'
-      });
-
       // Job 터미널 세션 생성 (TerminalSessionRequest 구조로 요청)
       const response = await deployerApi_functions.createJobTerminal(
         jobName, 
@@ -187,8 +181,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
       
       // TerminalSessionResponse 구조에 맞게 처리
       const session = response.data;
-      console.log('터미널 세션 생성 성공:', session);
-      console.log('WebSocket URL:', session.websocket_url);
       
       setCurrentSession(session);
       
@@ -196,13 +188,9 @@ const DeployerDetailPage = ({ terminal = false }) => {
       if (session?.session_id) {
         connectToTerminal(session.session_id);
       } else {
-        console.warn('세션 ID가 응답에 없습니다:', session);
         alert('터미널 세션은 생성되었지만 세션 ID를 찾을 수 없습니다.');
       }
     } catch (err) {
-      console.error('터미널 생성 오류:', err);
-      console.error('에러 상세:', err.response?.data);
-      
       let errorMessage = '터미널 생성 실패';
       if (err.response?.data?.detail) {
         errorMessage += `: ${err.response.data.detail}`;
@@ -220,13 +208,11 @@ const DeployerDetailPage = ({ terminal = false }) => {
     }
 
     try {
-      console.log('터미널 WebSocket 연결 시도:', sessionId);
       const websocket = createTerminalWebSocket(sessionId);
       wsRef.current = websocket;
       setWs(websocket);
 
       websocket.onopen = () => {
-        console.log('터미널 WebSocket 연결됨');
         setTerminalConnected(true);
         setTerminalOutput(prev => prev + `\n=== 터미널 연결됨 (세션: ${sessionId.substring(0, 8)}...) ===\n`);
         
@@ -239,7 +225,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('터미널 메시지 수신:', data);
           
           switch (data.type) {
             case 'connected':
@@ -259,35 +244,29 @@ const DeployerDetailPage = ({ terminal = false }) => {
               setTerminalOutput(prev => prev + `\nERROR: ${data.message}\n`);
               break;
             default:
-              console.log('알 수 없는 메시지 타입:', data.type);
               setTerminalOutput(prev => prev + JSON.stringify(data) + '\n');
           }
         } catch (parseErr) {
-          console.error('메시지 파싱 오류:', parseErr);
           setTerminalOutput(prev => prev + event.data + '\n');
         }
       };
 
       websocket.onclose = (event) => {
-        console.log('터미널 WebSocket 연결 종료:', event.code, event.reason);
         setTerminalConnected(false);
         setTerminalOutput(prev => prev + `\n=== 터미널 연결 종료 (코드: ${event.code}) ===\n`);
       };
 
       websocket.onerror = (error) => {
-        console.error('터미널 WebSocket 오류:', error);
         setTerminalOutput(prev => prev + `\n=== 연결 오류: ${error.message || 'WebSocket 연결 실패'} ===\n`);
       };
 
     } catch (err) {
-      console.error('터미널 연결 실패:', err);
       alert(`터미널 연결 실패: ${err.message}`);
     }
   };
 
   const sendTerminalCommand = () => {
     if (ws && terminalConnected && terminalInput.trim()) {
-      console.log('터미널 명령 전송:', terminalInput);
       try {
         ws.send(JSON.stringify({
           type: 'input',
@@ -295,7 +274,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
         }));
         setTerminalInput('');
       } catch (err) {
-        console.error('터미널 명령 전송 오류:', err);
         setTerminalOutput(prev => prev + `\n=== 명령 전송 실패: ${err.message} ===\n`);
       }
     }
@@ -320,7 +298,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
               data: '\n'
             }));
           } catch (err) {
-            console.error('터미널 입력 전송 오류:', err);
           }
         }
         break;
@@ -340,7 +317,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
             data: `\x1b[${event.key === 'ArrowUp' ? 'A' : event.key === 'ArrowDown' ? 'B' : event.key === 'ArrowLeft' ? 'D' : 'C'}`
           }));
         } catch (err) {
-          console.error('화살표 키 전송 오류:', err);
         }
         break;
 
@@ -352,7 +328,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
             data: '\t'
           }));
         } catch (err) {
-          console.error('Tab 키 전송 오류:', err);
         }
         break;
 
@@ -367,7 +342,6 @@ const DeployerDetailPage = ({ terminal = false }) => {
             }));
             setTerminalInput('');
           } catch (err) {
-            console.error('Ctrl+C 전송 오류:', err);
           }
         } else {
           // 일반 문자 입력
@@ -383,9 +357,7 @@ const DeployerDetailPage = ({ terminal = false }) => {
               type: 'input',
               data: '\x04' // Ctrl+D
             }));
-          } catch (err) {
-            console.error('Ctrl+D 전송 오류:', err);
-          }
+          } catch (err) {}
         } else {
           // 일반 문자 입력
           setTerminalInput(prev => prev + event.key);
