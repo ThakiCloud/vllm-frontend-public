@@ -56,10 +56,14 @@ const DEPLOYER_API_BASE_URL = isDevelopment
   ? 'http://localhost:8002'   // 개발환경: 직접 접근
   : '/deploy';                       // 프로덕션: nginx에서 /deploy/* → 8002포트 프록시
 
+const VLLM_API_GATEWAY_BASE_URL = isDevelopment 
+  ? 'http://localhost:8080'   // 개발환경: 직접 접근
+  : '/vllm-api-gateway';                       
+
 // Benchmark Results API Client (기존)
 export const benchmarkApi = axios.create({
   baseURL: BENCHMARK_API_BASE_URL,
-  headers: {
+  headers: { 
     'Content-Type': 'application/json',
   },
 });
@@ -75,6 +79,13 @@ export const projectApi = axios.create({
 // Benchmark Deployer API Client (신규)
 export const deployerApi = axios.create({
   baseURL: DEPLOYER_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const vllmApiGateway = axios.create({
+  baseURL: VLLM_API_GATEWAY_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -187,6 +198,10 @@ export const createTerminalWebSocket = (sessionId, baseUrl = null) => {
   
   const url = `${wsBaseUrl}/terminal/${sessionId}`;
   return new WebSocket(url);
+};
+
+export const vllmApiGateway_functions = {
+  getModelList: () => vllmApiGateway.get('/v1/models'),
 };
 
 // Default export for backward compatibility

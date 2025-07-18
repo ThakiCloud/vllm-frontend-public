@@ -14,6 +14,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import FileEditPage from './pages/FileEditPage';
 import DeployerListPage from './pages/DeployerListPage';
 import DeployerDetailPage from './pages/DeployerDetailPage';
+import ModelServingPage from './pages/ModelServingPage';
 import './App.css';
 
 // Create Material-UI theme
@@ -73,6 +74,9 @@ function App() {
             <Route path="/deployer" element={<DeployerListPage />} />
             <Route path="/deployer/:jobName" element={<DeployerDetailPage />} />
             <Route path="/deployer/:jobName/terminal" element={<DeployerDetailPage terminal={true} />} />
+            
+            {/* Model Serving Routes */}
+            <Route path="/models" element={<ModelServingPage />} />
             
             {/* Settings Route (placeholder) */}
             <Route path="/settings" element={
