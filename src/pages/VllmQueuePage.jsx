@@ -40,7 +40,7 @@ import {
   Assignment as LogIcon
 } from '@mui/icons-material';
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import { vllmManagementApi_functions, projectsApi, filesApi } from '../utils/api';
+import { vllmManagementApi_functions, projectsApi, filesApi, deployerApi_functions } from '../utils/api';
 
 const defaultVllmConfig = {
   model_name: "Qwen/Qwen2-1.5B-Instruct",
@@ -265,13 +265,18 @@ function VllmQueuePage() {
     try {
       // Try to get logs from deployer API if deployment_id exists
       if (request.deployment_id) {
-        const response = await fetch(`http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/jobs/${request.deployment_id}/logs?namespace=${request.vllm_config?.namespace || 'default'}&tail_lines=1000`);
-        if (response.ok) {
-          const logData = await response.text();
-          setLogs(logData || 'No logs available');
-        } else {
-          setLogs('Failed to fetch deployment logs');
-        }
+                 try {
+           const response = await deployerApi_functions.getJobLogs(
+             request.deployment_id, 
+             request.vllm_config?.namespace || 'default',
+             1000
+           );
+           // 로그 데이터가 문자열이면 그대로, 객체면 적절히 처리
+           const logData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
+           setLogs(logData || 'No logs available');
+         } catch (err) {
+           setLogs('Failed to fetch deployment logs');
+         }
       } else {
         setLogs('Deployment not started yet - no logs available');
       }
@@ -288,13 +293,18 @@ function VllmQueuePage() {
     setLoadingLogs(true);
     try {
       if (selectedRequestLogs.deployment_id) {
-        const response = await fetch(`http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/jobs/${selectedRequestLogs.deployment_id}/logs?namespace=${selectedRequestLogs.vllm_config?.namespace || 'default'}&tail_lines=1000`);
-        if (response.ok) {
-          const logData = await response.text();
-          setLogs(logData || 'No logs available');
-        } else {
-          setLogs('Failed to fetch deployment logs');
-        }
+                 try {
+           const response = await deployerApi_functions.getJobLogs(
+             selectedRequestLogs.deployment_id, 
+             selectedRequestLogs.vllm_config?.namespace || 'default',
+             1000
+           );
+           // 로그 데이터가 문자열이면 그대로, 객체면 적절히 처리
+           const logData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
+           setLogs(logData || 'No logs available');
+         } catch (err) {
+           setLogs('Failed to fetch deployment logs');
+         }
       }
     } catch (error) {
       setLogs(`Error refreshing logs: ${error.message}`);

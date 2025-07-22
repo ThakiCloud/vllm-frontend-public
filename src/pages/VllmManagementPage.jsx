@@ -48,6 +48,7 @@ import {
   Schedule as ScheduleIcon,
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import { vllmManagementApi_functions } from '../utils/api';
 
 const VllmManagementPage = () => {
   const [queueData, setQueueData] = useState([]);
@@ -89,27 +90,17 @@ const VllmManagementPage = () => {
       console.log('VllmManagementPage: loadQueueData called');
       setLoading(true);
       
-      // API calls to VLLM Management queue endpoints
+      // API calls to VLLM Management queue endpoints via nginx proxy
       console.log('VllmManagementPage: Making API calls to benchmark-vllm service');
       const [queueResponse, statusResponse] = await Promise.all([
-        fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/list'),
-        fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/status')
+        vllmManagementApi_functions.getQueueList(),
+        vllmManagementApi_functions.getQueueStatus()
       ]);
       
-      console.log('VllmManagementPage: API responses received', {
-        queueStatus: queueResponse.status,
-        statusStatus: statusResponse.status
-      });
+      console.log('VllmManagementPage: API responses received');
 
-      if (!queueResponse.ok || !statusResponse.ok) {
-        const queueError = !queueResponse.ok ? await queueResponse.text() : '';
-        const statusError = !statusResponse.ok ? await statusResponse.text() : '';
-        console.error('VllmManagementPage: API error', { queueError, statusError });
-        throw new Error(`Failed to fetch queue data: ${queueError || statusError}`);
-      }
-
-      const queueList = await queueResponse.json();
-      const status = await statusResponse.json();
+      const queueList = queueResponse.data;
+      const status = statusResponse.data;
       
       console.log('VllmManagementPage: Data received', {
         queueListLength: queueList.length,
@@ -142,12 +133,11 @@ const VllmManagementPage = () => {
   const loadCurrentDeployments = async () => {
     try {
       // VLLM 배포 목록을 가져옵니다
-      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/deployments');
+      const response = await vllmManagementApi_functions.listDeployments();
       
-      if (response.ok) {
-        const deployments = await response.json();
+      if (response.data) {
         // running 상태인 배포만 필터링
-        const runningDeployments = Object.values(deployments).filter(
+        const runningDeployments = Object.values(response.data).filter(
           deployment => deployment.status === 'running'
         );
         setCurrentDeployments(runningDeployments);
@@ -174,26 +164,16 @@ const VllmManagementPage = () => {
     }
 
     try {
-      let response;
       let actionMessage = '';
       
       if (requestStatus === 'processing') {
         // For processing requests, use cancel endpoint
-        response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}/cancel`, {
-          method: 'POST'
-        });
+        await vllmManagementApi_functions.cancelQueueRequest(queueRequestId);
         actionMessage = 'Request cancelled successfully! All associated jobs have been cleaned up.';
       } else {
         // For non-processing requests, use delete endpoint
-        response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}`, {
-          method: 'DELETE'
-        });
+        await vllmManagementApi_functions.cancelQueueRequest(queueRequestId);
         actionMessage = 'Request deleted successfully!';
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Failed to ${action} request`);
       }
 
       await loadQueueData();

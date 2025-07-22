@@ -53,7 +53,7 @@ import {
   Work as BenchmarkIcon,
 } from '@mui/icons-material';
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import { vllmManagementApi_functions, projectsApi, filesApi } from '../utils/api';
+import { vllmManagementApi_functions, projectsApi, filesApi, deployerApi_functions } from '../utils/api';
 
 const DeployerListPage = () => {
   const navigate = useNavigate();
@@ -942,33 +942,38 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       console.log('VLLM Helm Config:', vllmHelmConfig);
 
       // API 호출 - VLLM 생성을 건너뛰는 경우 무조건 큐 배포 사용, 아니면 VLLM 프로젝트 선택 여부에 따라 결정
-              const apiEndpoint = skipVllmCreation
-          ? 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
-          : vllmDeployment.selectedProject
-          ? 'http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/helm/deploy'  // 프로젝트 선택됨: Helm 배포
-          : 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'; // 프로젝트 선택 안됨: 큐 배포
-      
-      console.log('Using API endpoint:', apiEndpoint);
-      
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      let response;
+      if (skipVllmCreation || !vllmDeployment.selectedProject) {
+        // 큐 배포 사용 (VLLM 생성 건너뛰기 또는 프로젝트 선택 안됨)
+        console.log('Using queue deployment API');
+        response = await vllmManagementApi_functions.addToQueue(
+          requestData.vllm_config,
+          requestData.benchmark_configs,
+          requestData.scheduling_config,
+          requestData.priority,
+          requestData.skip_vllm_creation
+        );
+      } else {
+        // Helm 배포 사용 (프로젝트 선택됨)
+        console.log('Using Helm deployment API');
+        response = await fetch('/deploy/vllm/helm/deploy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Server error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        
+        response = { data: await response.json() };
       }
 
-      const result = await response.json();
-      console.log('Deployment success response:', result);
+      console.log('Deployment success response:', response.data);
       
       // 대화상자는 이미 닫혔으므로 성공 메시지만 표시
       const successMessage = skipVllmCreation 
@@ -1007,8 +1012,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleCheckSchedulerStatus = async () => {
     try {
-      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/status');
-      const data = await response.json();
+      const response = await deployerApi_functions.getStatus();
+      const data = response.data;
       alert(`큐 스케줄러 상태:\n처리 중: ${data.processing_queue ? 'Yes' : 'No'}\n실행 중: ${data.scheduler_running ? 'Yes' : 'No'}\n${data.message}`);
     } catch (err) {
       alert(`큐 스케줄러 상태 확인 실패: ${err.message}`);
@@ -1017,7 +1022,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleTriggerQueue = async () => {
     try {
-      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/trigger', {
+      // deployerApi에 trigger endpoint가 없으므로 직접 fetch 사용하되 프록시 경로 사용
+      const response = await fetch('/deploy/vllm/queue/scheduler/trigger', {
         method: 'POST'
       });
       const data = await response.json();
