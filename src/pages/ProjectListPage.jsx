@@ -176,13 +176,30 @@ function ProjectListPage() {
                       </Typography>
                     </Box>
 
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Config Path: {project.config_path || 'config/'}
-                    </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Job Path: {project.job_path || 'job/'}
-                    </Typography>
+                    <Box mb={1}>
+                      <Chip
+                        label={project.project_type || 'benchmark'}
+                        color={project.project_type === 'vllm' ? 'secondary' : 'primary'}
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                    </Box>
+
+                    {project.project_type === 'vllm' ? (
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Values Path: {project.vllm_values_path || 'charts/'}
+                      </Typography>
+                    ) : (
+                      <>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          Config Path: {project.config_path || 'config/'}
+                        </Typography>
+                        
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          Job Path: {project.job_path || 'job/'}
+                        </Typography>
+                      </>
+                    )}
 
                     <Typography variant="caption" color="text.secondary">
                       Last Sync: {formatLastSync(project.last_sync)}

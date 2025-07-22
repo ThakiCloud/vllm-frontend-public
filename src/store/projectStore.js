@@ -8,6 +8,7 @@ export const useProjectStore = create((set, get) => ({
   files: {
     config: [],
     job: [],
+    vllm: [],
     modified: [],
   },
   loading: false,
@@ -232,12 +233,40 @@ export const useProjectStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await filesApi.list(projectId, fileType);
+      console.log(`fetchFiles(${projectId}, ${fileType}) response:`, response.data);
+      
       // 백엔드에서 모든 파일을 반환하므로, source가 "original"인 파일들만 필터링
       const originalFiles = response.data.filter(file => file.source === 'original');
+      console.log(`fetchFiles(${projectId}, ${fileType}) filtered original files:`, originalFiles);
+      
       set((state) => ({
         files: {
           ...state.files,
           [fileType]: originalFiles,
+        },
+        loading: false,
+      }));
+    } catch (error) {
+      console.error(`fetchFiles(${projectId}, ${fileType}) error:`, error);
+      set({ error: error.message, loading: false });
+    }
+  },
+
+  // VLLM files fetching (custom-values.yaml files)
+  fetchVllmFiles: async (projectId) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await filesApi.list(projectId, 'vllm');
+      // vllm 프로젝트의 경우 custom-values*.yaml 파일들을 필터링
+      const vllmFiles = response.data.filter(file => 
+        file.source === 'original' && 
+        file.file_path && 
+        (file.file_path.includes('custom-values') && file.file_path.endsWith('.yaml'))
+      );
+      set((state) => ({
+        files: {
+          ...state.files,
+          vllm: vllmFiles,
         },
         loading: false,
       }));

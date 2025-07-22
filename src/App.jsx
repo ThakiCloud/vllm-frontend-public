@@ -15,6 +15,7 @@ import FileEditPage from './pages/FileEditPage';
 import DeployerListPage from './pages/DeployerListPage';
 import DeployerDetailPage from './pages/DeployerDetailPage';
 import ModelServingPage from './pages/ModelServingPage';
+import VllmManagementPage from './pages/VllmManagementPage';
 import './App.css';
 
 // Create Material-UI theme
@@ -77,6 +78,9 @@ function App() {
             
             {/* Model Serving Routes */}
             <Route path="/models" element={<ModelServingPage />} />
+            
+            {/* VLLM Management Routes */}
+            <Route path="/vllm-management" element={<VllmManagementPage />} />
             
             {/* Settings Route (placeholder) */}
             <Route path="/settings" element={

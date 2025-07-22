@@ -1,5 +1,5 @@
 import { AppBar, Toolbar, Typography, Box, Container, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Divider } from '@mui/material';
-import { Dashboard as DashboardIcon, Settings as SettingsIcon, Folder as FolderIcon, CloudQueue as DeployIcon, Memory as ModelIcon } from '@mui/icons-material';
+import { Dashboard as DashboardIcon, Settings as SettingsIcon, Folder as FolderIcon, CloudQueue as DeployIcon, Memory as ModelIcon, Storage as VllmIcon } from '@mui/icons-material';
 import { Link, useLocation } from 'react-router-dom';
 
 const drawerWidth = 300;
@@ -9,6 +9,7 @@ const menuItems = [
   { text: 'Project Manager', icon: <FolderIcon />, path: '/projects' },
   { text: 'Benchmark Deployer', icon: <DeployIcon />, path: '/deployer' },
   { text: 'Model Serving', icon: <ModelIcon />, path: '/models' },
+  { text: 'VLLM Management', icon: <VllmIcon />, path: '/vllm-management' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
 

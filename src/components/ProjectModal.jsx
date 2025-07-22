@@ -9,6 +9,11 @@ import {
   Box,
   Alert,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
 } from '@mui/material';
 import { useProjectStore } from '../store/projectStore';
 import { convertGitHubUrl } from '../utils/api';
@@ -16,10 +21,12 @@ import { convertGitHubUrl } from '../utils/api';
 function ProjectModal({ open, onClose, project = null }) {
   const [formData, setFormData] = useState({
     name: '',
+    project_type: 'benchmark',
     repository_url: '',
     github_token: '',
     config_path: 'config/',
     job_path: 'job/',
+    vllm_values_path: '',
     polling_interval: 86400,
   });
   const [errors, setErrors] = useState({});
@@ -32,19 +39,23 @@ function ProjectModal({ open, onClose, project = null }) {
     if (project) {
       setFormData({
         name: project.name || '',
+        project_type: project.project_type || 'benchmark',
         repository_url: project.repository_url || '',
         github_token: project.github_token || '',
         config_path: project.config_path || 'config/',
         job_path: project.job_path || 'job/',
+        vllm_values_path: project.vllm_values_path || '',
         polling_interval: project.polling_interval || 300,
       });
     } else {
       setFormData({
         name: '',
+        project_type: 'benchmark',
         repository_url: '',
         github_token: '',
         config_path: 'config/',
         job_path: 'job/',
+        vllm_values_path: '',
         polling_interval: 300,
       });
     }
@@ -89,12 +100,18 @@ function ProjectModal({ open, onClose, project = null }) {
       newErrors.github_token = 'GitHub token is required';
     }
     
-    if (!formData.config_path.trim()) {
-      newErrors.config_path = 'Config path is required';
-    }
-    
-    if (!formData.job_path.trim()) {
-      newErrors.job_path = 'Job path is required';
+    if (formData.project_type === 'benchmark') {
+      if (!formData.config_path.trim()) {
+        newErrors.config_path = 'Config path is required';
+      }
+      
+      if (!formData.job_path.trim()) {
+        newErrors.job_path = 'Job path is required';
+      }
+    } else if (formData.project_type === 'vllm') {
+      if (!formData.vllm_values_path.trim()) {
+        newErrors.vllm_values_path = 'VLLM values path is required';
+      }
     }
     
     if (formData.polling_interval < 60) {
@@ -119,10 +136,17 @@ function ProjectModal({ open, onClose, project = null }) {
         repository_url: convertGitHubUrl(formData.repository_url),
       };
       
+      console.log('Original form data:', formData);
+      console.log('Converted project data:', convertedData);
+      console.log('Project type being sent:', convertedData.project_type);
+      
       if (isEditing) {
+        console.log('Updating project...');
         await updateProject(project.project_id, convertedData);
       } else {
-        await createProject(convertedData);
+        console.log('Creating new project...');
+        const result = await createProject(convertedData);
+        console.log('Project creation result:', result);
       }
       
       // 성공 시에만 모달 닫기
@@ -142,10 +166,12 @@ function ProjectModal({ open, onClose, project = null }) {
   const handleClose = () => {
     setFormData({
       name: '',
+      project_type: 'benchmark',
       repository_url: '',
       github_token: '',
       config_path: 'config/',
       job_path: 'job/',
+      vllm_values_path: '',
       polling_interval: 300,
     });
     setErrors({});
@@ -185,6 +211,23 @@ function ProjectModal({ open, onClose, project = null }) {
             fullWidth
             required
           />
+
+          <FormControl fullWidth required>
+            <InputLabel>Project Type</InputLabel>
+            <Select
+              name="project_type"
+              value={formData.project_type}
+              onChange={handleChange}
+              label="Project Type"
+              error={Boolean(errors.project_type)}
+            >
+              <MenuItem value="benchmark">Benchmark</MenuItem>
+              <MenuItem value="vllm">VLLM</MenuItem>
+            </Select>
+            <FormHelperText error={Boolean(errors.project_type)}>
+              {errors.project_type || 'Select the type of project to manage'}
+            </FormHelperText>
+          </FormControl>
           
           <TextField
             name="repository_url"
@@ -210,27 +253,45 @@ function ProjectModal({ open, onClose, project = null }) {
             required
           />
           
-          <TextField
-            name="config_path"
-            label="Config Path"
-            value={formData.config_path}
-            onChange={handleChange}
-            error={Boolean(errors.config_path)}
-            helperText={errors.config_path || 'Path to config files in the repository'}
-            fullWidth
-            required
-          />
-          
-          <TextField
-            name="job_path"
-            label="Job Path"
-            value={formData.job_path}
-            onChange={handleChange}
-            error={Boolean(errors.job_path)}
-            helperText={errors.job_path || 'Path to job files in the repository'}
-            fullWidth
-            required
-          />
+          {formData.project_type === 'benchmark' && (
+            <>
+              <TextField
+                name="config_path"
+                label="Config Path"
+                value={formData.config_path}
+                onChange={handleChange}
+                error={Boolean(errors.config_path)}
+                helperText={errors.config_path || 'Path to config files in the repository'}
+                fullWidth
+                required
+              />
+              
+              <TextField
+                name="job_path"
+                label="Job Path"
+                value={formData.job_path}
+                onChange={handleChange}
+                error={Boolean(errors.job_path)}
+                helperText={errors.job_path || 'Path to job files in the repository'}
+                fullWidth
+                required
+              />
+            </>
+          )}
+
+          {formData.project_type === 'vllm' && (
+            <TextField
+              name="vllm_values_path"
+              label="VLLM Values Path"
+              value={formData.vllm_values_path}
+              onChange={handleChange}
+              error={Boolean(errors.vllm_values_path)}
+              helperText={errors.vllm_values_path || 'Path to custom-values*.yaml files in the repository (e.g., charts/)'}
+              fullWidth
+              required
+              placeholder="charts/"
+            />
+          )}
           
           <TextField
             name="polling_interval"

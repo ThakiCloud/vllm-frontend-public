@@ -58,7 +58,11 @@ const DEPLOYER_API_BASE_URL = isDevelopment
 
 const VLLM_API_GATEWAY_BASE_URL = isDevelopment 
   ? 'http://localhost:8080'   // 개발환경: 직접 접근
-  : '/vllm-api-gateway';                       
+  : '/vllm-api-gateway';
+
+const VLLM_MANAGEMENT_API_BASE_URL = isDevelopment 
+  ? 'http://localhost:8005'   // 개발환경: 직접 접근 (benchmark-vllm)
+  : '/vllm';                  // 프로덕션: nginx에서 /vllm/* → 8005포트 프록시                       
 
 // Benchmark Results API Client (기존)
 export const benchmarkApi = axios.create({
@@ -86,6 +90,14 @@ export const deployerApi = axios.create({
 
 export const vllmApiGateway = axios.create({
   baseURL: VLLM_API_GATEWAY_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// VLLM Management API Client (신규)
+export const vllmManagementApi = axios.create({
+  baseURL: VLLM_MANAGEMENT_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -202,6 +214,121 @@ export const createTerminalWebSocket = (sessionId, baseUrl = null) => {
 
 export const vllmApiGateway_functions = {
   getModelList: () => vllmApiGateway.get('/v1/models'),
+};
+
+// VLLM Management API Functions (신규)
+export const vllmManagementApi_functions = {
+  // 기존 VLLM 배포 관리
+  deploy: (config, deploymentName = null) => 
+    vllmManagementApi.post('/deploy', { config, deployment_name: deploymentName }),
+  
+  deployFromFile: (configFile) => 
+    vllmManagementApi.post('/deploy-from-file', { config_file: configFile }),
+  
+  deployDefault: () => 
+    vllmManagementApi.post('/deploy-default'),
+  
+  listDeployments: () => 
+    vllmManagementApi.get('/deployments'),
+  
+  getDeploymentStatus: (deploymentId) => 
+    vllmManagementApi.get(`/deployments/${deploymentId}/status`),
+  
+  stopDeployment: (deploymentId) => 
+    vllmManagementApi.delete(`/deployments/${deploymentId}`),
+  
+  // 신규 큐 관리 API
+  addToQueue: (config, benchmarkConfigs = null, schedulingConfig = null, priority = 'medium', skipVllmCreation = false) => 
+    vllmManagementApi.post('/queue/deployment', {
+      vllm_config: config,
+      benchmark_configs: benchmarkConfigs,
+      scheduling_config: schedulingConfig,
+      priority,
+      skip_vllm_creation: skipVllmCreation
+    }),
+  
+  getQueueList: () => 
+    vllmManagementApi.get('/queue/list'),
+  
+  getQueueStatus: () => 
+    vllmManagementApi.get('/queue/status'),
+  
+  getQueueRequest: (requestId) => 
+    vllmManagementApi.get(`/queue/${requestId}`),
+  
+  cancelQueueRequest: (requestId) => 
+    vllmManagementApi.delete(`/queue/${requestId}`),
+  
+  changeQueuePriority: (requestId, priority) => 
+    vllmManagementApi.post(`/queue/${requestId}/priority`, { priority }),
+  
+  // 신규 스케줄러 API
+  startScheduler: () => 
+    vllmManagementApi.post('/scheduler/start'),
+  
+  stopScheduler: () => 
+    vllmManagementApi.post('/scheduler/stop'),
+  
+  pauseScheduler: () => 
+    vllmManagementApi.post('/scheduler/pause'),
+  
+  resumeScheduler: () => 
+    vllmManagementApi.post('/scheduler/resume'),
+  
+  getSchedulerStatus: () => 
+    vllmManagementApi.get('/scheduler/status'),
+  
+  updateSchedulerConfig: (config) => 
+    vllmManagementApi.put('/scheduler/config', config),
+  
+  // 신규 비교 및 분석 API
+  compareDeployments: () => 
+    vllmManagementApi.get('/compare/deployments'),
+  
+  compareConfigs: (config1, config2) => 
+    vllmManagementApi.post('/compare/configs', { config1, config2 }),
+  
+  analyzeGpuResources: () => 
+    vllmManagementApi.get('/compare/gpu-resources'),
+  
+  checkCompatibility: (config) => 
+    vllmManagementApi.post('/compare/compatibility', { config }),
+  
+  // 신규 벤치마크 연동 API
+  triggerBenchmark: (deploymentId, benchmarkConfig) => 
+    vllmManagementApi.post('/benchmark/trigger', { deployment_id: deploymentId, benchmark_config: benchmarkConfig }),
+  
+  getBenchmarkResults: (deploymentId) => 
+    vllmManagementApi.get(`/benchmark/results/${deploymentId}`),
+
+  // 벤치마크 Job 생성 API (benchmark-deployer 연동)
+  createBenchmarkJob: (vllmDeploymentId, jobConfig) => 
+    vllmManagementApi.post('/benchmark/create-job', { 
+      vllm_deployment_id: vllmDeploymentId, 
+      job_config: jobConfig 
+    }),
+  
+  // 큐에 벤치마크 Job 생성 요청 추가
+  addBenchmarkJobToQueue: (vllmConfig, benchmarkJobConfig, priority = 'medium') => 
+    vllmManagementApi.post('/queue/benchmark-job', {
+      vllm_config: vllmConfig,
+      benchmark_job_config: benchmarkJobConfig,
+      priority
+    }),
+  
+  // 헬스체크 및 시스템 상태
+  getHealth: () => 
+    vllmManagementApi.get('/health'),
+  
+  getSystemStatus: () => 
+    vllmManagementApi.get('/status'),
+  
+  // 설정 파일 관리
+  listConfigFiles: () => 
+    vllmManagementApi.get('/configs/files'),
+  
+  validateConfig: (config) => 
+    vllmManagementApi.get('/configs/validate', { params: { config } }),
 };
 
 // Default export for backward compatibility

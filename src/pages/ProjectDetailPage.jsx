@@ -58,6 +58,7 @@ function ProjectDetailPage() {
     error,
     fetchProject,
     fetchFiles,
+    fetchVllmFiles,
     fetchModifiedFiles,
     syncProject,
     deleteModifiedFile,
@@ -69,20 +70,76 @@ function ProjectDetailPage() {
 
   useEffect(() => {
     if (projectId) {
-      fetchProject(projectId);
-      fetchFiles(projectId, 'config');
-      fetchFiles(projectId, 'job');
-      fetchModifiedFiles(projectId);
+      const loadProjectAndFiles = async () => {
+        try {
+          // 프로젝트 정보를 먼저 로드
+          await fetchProject(projectId);
+          await fetchModifiedFiles(projectId);
+          
+          // 프로젝트 정보 로드 후 현재 상태에서 프로젝트 가져오기
+          const currentState = useProjectStore.getState();
+          const projectData = currentState.currentProject;
+          
+          console.log('Project loaded:', projectData);
+          
+          // 백엔드에서 반환하는 데이터 구조: {project: {...}, stats: {...}}
+          const project = projectData?.project || projectData;
+          console.log('Project type:', project?.project_type);
+          
+          // 프로젝트 타입에 따라 적절한 파일들 로드
+          if (project?.project_type === 'vllm') {
+            console.log('Loading VLLM files...');
+            await fetchVllmFiles(projectId);
+          } else {
+            console.log('Loading benchmark files...');
+            // 기본값 또는 benchmark 타입
+            await fetchFiles(projectId, 'config');
+            await fetchFiles(projectId, 'job');
+            
+            // 로드 후 상태 확인
+            const currentState = useProjectStore.getState();
+            console.log('After loading files, current state:', {
+              config: currentState.files.config,
+              job: currentState.files.job,
+              modified: currentState.files.modified
+            });
+            
+            // 디버깅을 위해 Job Files 탭으로 자동 전환 (임시)
+            // setTabValue(1);
+          }
+        } catch (error) {
+          console.error('Error loading project and files:', error);
+        }
+      };
+      
+      loadProjectAndFiles();
     }
-  }, [projectId, fetchProject, fetchFiles, fetchModifiedFiles]);
+  }, [projectId, fetchProject, fetchFiles, fetchVllmFiles, fetchModifiedFiles]);
 
   const handleTabChange = (event, newValue) => {
+    console.log('Tab change:', { 
+      currentTabValue: tabValue, 
+      newValue, 
+      projectType: currentProject?.project?.project_type || currentProject?.project_type,
+      event: event.target
+    });
     setTabValue(newValue);
   };
 
   const handleSync = async () => {
     try {
       await syncProject(projectId);
+      
+      // 동기화 후 프로젝트 타입에 따라 파일들을 다시 가져옴
+      const projectData = useProjectStore.getState().currentProject;
+      const project = projectData?.project || projectData;
+      if (project?.project_type === 'vllm') {
+        await fetchVllmFiles(projectId);
+      } else {
+        await fetchFiles(projectId, 'config');
+        await fetchFiles(projectId, 'job');
+      }
+      
       // sync 상태 관리는 이제 store에서 자동으로 처리됨
     } catch (error) {
       // 에러 처리도 store에서 자동으로 처리됨
@@ -109,9 +166,15 @@ function ProjectDetailPage() {
   const handleCloseFileModal = () => {
     setIsFileModalOpen(false);
     setSelectedFile(null);
-    // Refresh files after modal close
-    fetchFiles(projectId, 'config');
-    fetchFiles(projectId, 'job');
+    // Refresh files after modal close based on project type
+    const projectData = useProjectStore.getState().currentProject;
+    const project = projectData?.project || projectData;
+    if (project?.project_type === 'vllm') {
+      fetchVllmFiles(projectId);
+    } else {
+      fetchFiles(projectId, 'config');
+      fetchFiles(projectId, 'job');
+    }
   };
 
   const formatLastSync = (timestamp) => {
@@ -132,6 +195,12 @@ function ProjectDetailPage() {
   const getCombinedFiles = (fileType) => {
     const originalFiles = files[fileType] || [];
     const modifiedFiles = files.modified || [];
+    
+    console.log(`getCombinedFiles(${fileType}):`, {
+      originalFiles,
+      modifiedFiles,
+      'files[fileType]': files[fileType]
+    });
     
     // 백엔드에서 source 필드로 구분된 데이터를 처리
     const typeModifiedFiles = modifiedFiles.filter(f => f.file_type === fileType);
@@ -156,6 +225,7 @@ function ProjectDetailPage() {
       });
     });
     
+    console.log(`getCombinedFiles(${fileType}) result:`, combinedFiles);
     return combinedFiles;
   };
 
@@ -285,7 +355,8 @@ function ProjectDetailPage() {
   }
 
   // sync status 결정: global 상태가 있으면 우선 사용, 없으면 서버 데이터 기반
-  const lastSync = currentProject.project?.last_sync || currentProject.last_sync;
+  const project = currentProject?.project || currentProject;
+  const lastSync = project?.last_sync;
   const serverSyncStatusValue = lastSync ? 'synced' : 'pending';
   const globalSyncState = getProjectSyncState(projectId);
   const finalSyncStatusValue = globalSyncState || serverSyncStatusValue;
@@ -312,7 +383,7 @@ function ProjectDetailPage() {
         <Box display="flex" justifyContent="space-between" alignItems="flex-start">
           <Box>
             <Typography variant="h4" component="h1" gutterBottom>
-              {currentProject.name}
+              {project?.name || currentProject?.name}
             </Typography>
             
             <Box display="flex" alignItems="center" gap={2} mb={2}>
@@ -324,13 +395,13 @@ function ProjectDetailPage() {
               <Box display="flex" alignItems="center">
                 <GitHubIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
                 <Typography variant="body2" color="text.secondary">
-                  {currentProject.repository_url}
+                  {project?.repository_url || currentProject?.repository_url}
                 </Typography>
               </Box>
             </Box>
 
             <Typography variant="body2" color="text.secondary">
-              Last Sync: {formatLastSync(currentProject.project.last_sync)}
+              Last Sync: {formatLastSync(project?.last_sync)}
             </Typography>
           </Box>
 
@@ -373,77 +444,170 @@ function ProjectDetailPage() {
 
       {/* File Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
-          <Tab 
-            label={`Config Files (${files.config?.length + files.modified?.filter(f => f.file_type === 'config').length || 0})`} 
-            id="file-tab-0"
-            aria-controls="file-tabpanel-0"
-          />
-          <Tab 
-            label={`Job Files (${files.job?.length + files.modified?.filter(f => f.file_type === 'job').length || 0})`} 
-            id="file-tab-1"
-            aria-controls="file-tabpanel-1"
-          />
-        </Tabs>
+        {project?.project_type === 'vllm' ? (
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange}
+            indicatorColor="primary"
+            textColor="primary"
+          >
+            <Tab 
+              label={`VLLM Values Files (${getCombinedFiles('vllm').length})`} 
+              id="file-tab-0"
+              aria-controls="file-tabpanel-0"
+            />
+          </Tabs>
+        ) : (
+          <>
+            {/* 임시로 버튼으로 대체 */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <Button
+                variant={tabValue === 0 ? "contained" : "outlined"}
+                onClick={() => {
+                  console.log('Config button clicked');
+                  setTabValue(0);
+                }}
+              >
+                Config Files ({getCombinedFiles('config').length})
+              </Button>
+              <Button
+                variant={tabValue === 1 ? "contained" : "outlined"}
+                onClick={() => {
+                  console.log('Job button clicked');
+                  setTabValue(1);
+                }}
+              >
+                Job Files ({getCombinedFiles('job').length})
+              </Button>
+            </Box>
+            
+            {/* 원본 Tabs 컴포넌트 (숨김) */}
+            <Box sx={{ display: 'none' }}>
+              <Tabs 
+                value={tabValue} 
+                onChange={handleTabChange}
+                indicatorColor="primary"
+                textColor="primary"
+              >
+                <Tab 
+                  label={`Config Files (${getCombinedFiles('config').length})`} 
+                  id="file-tab-0"
+                  aria-controls="file-tabpanel-0"
+                />
+                <Tab 
+                  label={`Job Files (${getCombinedFiles('job').length})`} 
+                  id="file-tab-1"
+                  aria-controls="file-tabpanel-1"
+                />
+              </Tabs>
+            </Box>
+          </>
+        )}
       </Box>
 
-      {/* Config Files Tab */}
-      <TabPanel value={tabValue} index={0}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <Typography variant="h6">Config Files</Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleCreateFile('config')}
-          >
-            Create Custom Config
-          </Button>
-        </Box>
-
-        {files.config?.length === 0 ? (
-          <Box textAlign="center" py={4}>
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-              No config files found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Sync with GitHub or create a custom config file to get started.
-            </Typography>
+      {/* Dynamic tabs based on project type */}
+      {project?.project_type === 'vllm' ? (
+        // VLLM Values Files Tab
+        <TabPanel value={tabValue} index={0}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+            <Typography variant="h6">VLLM Values Files</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleCreateFile('vllm')}
+            >
+              Create Custom Values
+            </Button>
           </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {getCombinedFiles('config').map((file) => renderFileCard(file, 'config'))}
-          </Grid>
-        )}
-      </TabPanel>
 
-      {/* Job Files Tab */}
-      <TabPanel value={tabValue} index={1}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <Typography variant="h6">Job Files</Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleCreateFile('job')}
-          >
-            Create Custom Job
-          </Button>
-        </Box>
+          {files.vllm?.length === 0 ? (
+            <Box textAlign="center" py={4}>
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                No VLLM values files found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Sync with GitHub to fetch custom-values*.yaml files or create a new one.
+              </Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={3}>
+              {getCombinedFiles('vllm').map((file) => renderFileCard(file, 'vllm'))}
+            </Grid>
+          )}
+        </TabPanel>
+      ) : (
+        // Benchmark Project Tabs (Config and Job)
+        <>
+          {/* Config Files Tab */}
+          <TabPanel value={tabValue} index={0}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Typography variant="h6">Config Files</Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleCreateFile('config')}
+              >
+                Create Custom Config
+              </Button>
+            </Box>
 
-        {files.job?.length === 0 ? (
-          <Box textAlign="center" py={4}>
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-              No job files found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Sync with GitHub or create a custom job file to get started.
-            </Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {getCombinedFiles('job').map((file) => renderFileCard(file, 'job'))}
-          </Grid>
-        )}
-      </TabPanel>
+            {files.config?.length === 0 ? (
+              <Box textAlign="center" py={4}>
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  No config files found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Sync with GitHub or create a custom config file to get started.
+                </Typography>
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                {getCombinedFiles('config').map((file) => renderFileCard(file, 'config'))}
+              </Grid>
+            )}
+          </TabPanel>
+
+          {/* Job Files Tab */}
+          <TabPanel value={tabValue} index={1}>
+            {console.log('Job Files TabPanel render:', { tabValue, shouldShow: tabValue === 1 })}
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Typography variant="h6">Job Files</Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleCreateFile('job')}
+              >
+                Create Custom Job
+              </Button>
+            </Box>
+
+            {(() => {
+              const combinedJobFiles = getCombinedFiles('job');
+              console.log('Job files rendering check:', {
+                'files.job': files.job,
+                'files.job?.length': files.job?.length,
+                'combinedJobFiles': combinedJobFiles,
+                'combinedJobFiles.length': combinedJobFiles.length,
+                'condition': combinedJobFiles.length === 0
+              });
+              return combinedJobFiles.length === 0;
+            })() ? (
+              <Box textAlign="center" py={4}>
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  No job files found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Sync with GitHub or create a custom job file to get started.
+                </Typography>
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                {getCombinedFiles('job').map((file) => renderFileCard(file, 'job'))}
+              </Grid>
+            )}
+          </TabPanel>
+        </>
+      )}
 
       <FileModal
         open={isFileModalOpen}
