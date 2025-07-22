@@ -170,7 +170,7 @@ const FileEditPage = () => {
     } catch (error) {
       const fileExtension = fileData?.file_path?.split('.').pop()?.toLowerCase();
       const fileType = (fileExtension === 'yaml' || fileExtension === 'yml') ? 'YAML' : 'JSON';
-      setError(`Failed to save file. Please check ${fileType} format: ${error.message}`);
+      setError(`Failed to save file.. Please check ${fileType} format: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
