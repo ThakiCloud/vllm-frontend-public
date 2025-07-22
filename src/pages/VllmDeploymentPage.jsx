@@ -43,7 +43,7 @@ import {
   WorkOutline as BenchmarkIcon
 } from '@mui/icons-material';
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import { vllmManagementApi_functions, projectsApi, filesApi } from '../utils/api';
+import { vllmManagementApi_functions, projectsApi, filesApi, deployerApi_functions } from '../utils/api';
 
 const defaultVllmConfig = {
   model_name: "Qwen/Qwen2-1.5B-Instruct",
@@ -420,13 +420,20 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
         });
       }
       
-      // All deployments go through the queue now
-      await vllmManagementApi_functions.addToQueue(
-        config,
-        benchmarkConfigs, // Always pass array, even if empty
-        null, // scheduling config
-        'medium',
-        false // skipVllmCreation - always create VLLM in this page
+      // Use Helm deployment with GitHub token support
+      await deployerApi_functions.deployVllmWithHelm(
+        config, // vllmConfig
+        { // vllmHelmConfig
+          project_id: "bc8a1ab7-e65e-4126-80de-488ace7a8973", // TODO: Make this configurable
+          values_file_id: null,
+          release_name: deploymentName || `vllm-${Date.now()}`,
+          namespace: "vllm",
+          chart_path: "./charts/vllm",
+          additional_args: null
+        },
+        benchmarkConfigs, // benchmarkConfigs
+        null, // schedulingConfig
+        'medium' // priority
       );
       
       setError(null);
