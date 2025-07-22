@@ -154,33 +154,75 @@ const VllmManagementPage = () => {
 
   const handleCancelRequest = async (queueRequestId, requestStatus) => {
     // Show confirmation dialog
-    const action = requestStatus === 'processing' ? 'cancel' : 'delete';
-    const confirmMessage = requestStatus === 'processing' 
-      ? 'Are you sure you want to cancel this request? This will stop any running jobs and clean up resources.'
-      : 'Are you sure you want to delete this request?';
+    let action, confirmMessage, actionMessage;
+    
+    if (requestStatus === 'processing') {
+      action = 'cancel';
+      confirmMessage = 'Are you sure you want to cancel this request? This will stop any running jobs and clean up resources.';
+      actionMessage = 'Request cancelled successfully! All associated jobs have been cleaned up.';
+    } else if (requestStatus === 'failed') {
+      // For failed requests, offer both regular delete and force delete
+      const forceDelete = window.confirm(
+        'This request has failed. Choose:\n' +
+        'OK - Force delete (clean up any remaining resources)\n' +
+        'Cancel - Regular delete (only if no resources are running)'
+      );
+      
+      action = forceDelete ? 'force-delete' : 'delete';
+      confirmMessage = forceDelete 
+        ? 'Are you sure you want to force delete this failed request? This will clean up any remaining resources.'
+        : 'Are you sure you want to delete this failed request?';
+      actionMessage = forceDelete
+        ? 'Failed request force deleted successfully! All resources have been cleaned up.'
+        : 'Failed request deleted successfully!';
+    } else {
+      action = 'delete';
+      confirmMessage = 'Are you sure you want to delete this request?';
+      actionMessage = 'Request deleted successfully!';
+    }
     
     if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      let actionMessage = '';
-      
       if (requestStatus === 'processing') {
         // For processing requests, use cancel endpoint
         await vllmManagementApi_functions.cancelQueueRequest(queueRequestId);
-        actionMessage = 'Request cancelled successfully! All associated jobs have been cleaned up.';
+      } else if (action === 'force-delete') {
+        // For force delete, use the force delete endpoint
+        await vllmManagementApi_functions.forceDeleteQueueRequest(queueRequestId);
       } else {
-        // For non-processing requests, use delete endpoint
-        await vllmManagementApi_functions.cancelQueueRequest(queueRequestId);
-        actionMessage = 'Request deleted successfully!';
+        // For regular delete, use delete endpoint
+        await vllmManagementApi_functions.deleteQueueRequest(queueRequestId);
       }
 
       await loadQueueData();
       alert(actionMessage);
     } catch (err) {
       console.error(`Error ${action}ing request:`, err);
-      alert(`Failed to ${action} request: ${err.message}`);
+      
+      // If regular delete failed for a failed request, suggest force delete
+      if (action === 'delete' && requestStatus === 'failed' && err.response?.status === 400) {
+        const tryForceDelete = window.confirm(
+          `Regular delete failed: ${err.message}\n\n` +
+          'This might be because some resources are still running. ' +
+          'Would you like to try force delete instead?'
+        );
+        
+        if (tryForceDelete) {
+          try {
+            await vllmManagementApi_functions.forceDeleteQueueRequest(queueRequestId);
+            await loadQueueData();
+            alert('Request force deleted successfully! All resources have been cleaned up.');
+          } catch (forceErr) {
+            console.error('Error force deleting request:', forceErr);
+            alert(`Failed to force delete request: ${forceErr.message}`);
+          }
+        }
+      } else {
+        alert(`Failed to ${action} request: ${err.message}`);
+      }
     }
   };
 

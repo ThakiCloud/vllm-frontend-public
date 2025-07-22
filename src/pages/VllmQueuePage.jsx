@@ -206,21 +206,98 @@ function VllmQueuePage() {
     }
   };
 
-  const handleCancelRequest = async (requestId) => {
-    // Show confirmation dialog
-    if (!window.confirm('Are you sure you want to cancel this request? This will stop any running jobs and clean up resources.')) {
+  const handleCancelRequest = async (requestId, requestStatus = null) => {
+    // Determine request status if not provided
+    if (!requestStatus) {
+      const request = queueList.find(r => r.queue_request_id === requestId);
+      requestStatus = request?.status || 'unknown';
+    }
+    
+    let action, confirmMessage;
+    
+    if (requestStatus === 'processing') {
+      action = 'cancel';
+      confirmMessage = 'Are you sure you want to cancel this request? This will stop any running jobs and clean up resources.';
+    } else if (requestStatus === 'failed') {
+      // For failed requests, offer force delete option
+      const forceDelete = window.confirm(
+        'This request has failed. Choose:\n' +
+        'OK - Force delete (clean up any remaining resources)\n' +
+        'Cancel - Regular delete (only if no resources are running)'
+      );
+      
+      if (!forceDelete) {
+        // User chose regular delete, show confirmation
+        if (!window.confirm('Are you sure you want to delete this failed request?')) {
+          return;
+        }
+        action = 'delete';
+      } else {
+        // User chose force delete, show confirmation
+        if (!window.confirm('Are you sure you want to force delete this failed request? This will clean up any remaining resources.')) {
+          return;
+        }
+        action = 'force-delete';
+      }
+    } else {
+      // For other statuses, regular delete
+      if (!window.confirm('Are you sure you want to delete this request?')) {
+        return;
+      }
+      action = 'delete';
+    }
+    
+    // If we haven't shown a confirmation yet (for processing requests), show it now
+    if (action === 'cancel' && !window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      await vllmManagementApi_functions.cancelQueueRequest(requestId);
+      if (action === 'cancel') {
+        await vllmManagementApi_functions.cancelQueueRequest(requestId);
+      } else if (action === 'force-delete') {
+        await vllmManagementApi_functions.forceDeleteQueueRequest(requestId);
+      } else {
+        await vllmManagementApi_functions.deleteQueueRequest(requestId);
+      }
+      
       await loadQueueData();
-      // Show success message
       setError(null);
+      
+      // Show success message based on action
+      const successMessage = action === 'cancel' 
+        ? 'Request cancelled successfully!'
+        : action === 'force-delete'
+        ? 'Request force deleted successfully! All resources have been cleaned up.'
+        : 'Request deleted successfully!';
+      
       // You could add a success message state here if needed
+      console.log(successMessage);
     } catch (err) {
-      console.error('Error cancelling request:', err);
-      setError('Failed to cancel request: ' + err.message);
+      console.error(`Error ${action}ing request:`, err);
+      
+      // If regular delete failed for a failed request, suggest force delete
+      if (action === 'delete' && requestStatus === 'failed' && err.response?.status === 400) {
+        const tryForceDelete = window.confirm(
+          `Regular delete failed: ${err.message}\n\n` +
+          'This might be because some resources are still running. ' +
+          'Would you like to try force delete instead?'
+        );
+        
+        if (tryForceDelete) {
+          try {
+            await vllmManagementApi_functions.forceDeleteQueueRequest(requestId);
+            await loadQueueData();
+            setError(null);
+            console.log('Request force deleted successfully! All resources have been cleaned up.');
+          } catch (forceErr) {
+            console.error('Error force deleting request:', forceErr);
+            setError(`Failed to force delete request: ${forceErr.message}`);
+          }
+        }
+      } else {
+        setError(`Failed to ${action} request: ${err.message}`);
+      }
     }
   };
 
@@ -972,7 +1049,7 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => handleCancelRequest(request.queue_request_id)}
+                            onClick={() => handleCancelRequest(request.queue_request_id, request.status)}
                             title="Cancel Request"
                           >
                             <DeleteIcon />

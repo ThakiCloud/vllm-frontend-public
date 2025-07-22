@@ -257,7 +257,13 @@ export const vllmManagementApi_functions = {
     vllmManagementApi.get(`/queue/${requestId}`),
   
   cancelQueueRequest: (requestId) => 
+    vllmManagementApi.post(`/queue/${requestId}/cancel`),
+  
+  deleteQueueRequest: (requestId) => 
     vllmManagementApi.delete(`/queue/${requestId}`),
+  
+  forceDeleteQueueRequest: (requestId) => 
+    vllmManagementApi.delete(`/queue/${requestId}/force`),
   
   changeQueuePriority: (requestId, priority) => 
     vllmManagementApi.post(`/queue/${requestId}/priority`, { priority }),
