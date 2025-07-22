@@ -85,8 +85,8 @@ const VllmManagementPage = () => {
       
       // API calls to VLLM Management queue endpoints
       const [queueResponse, statusResponse] = await Promise.all([
-        fetch('http://localhost:8005/queue/list'),
-        fetch('http://localhost:8005/queue/status')
+        fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/list'),
+        fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/status')
       ]);
 
       if (!queueResponse.ok || !statusResponse.ok) {
@@ -121,7 +121,7 @@ const VllmManagementPage = () => {
   const loadCurrentDeployments = async () => {
     try {
       // VLLM 배포 목록을 가져옵니다
-      const response = await fetch('http://localhost:8005/deployments');
+      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/deployments');
       
       if (response.ok) {
         const deployments = await response.json();
@@ -158,13 +158,13 @@ const VllmManagementPage = () => {
       
       if (requestStatus === 'processing') {
         // For processing requests, use cancel endpoint
-        response = await fetch(`http://localhost:8005/queue/${queueRequestId}/cancel`, {
+        response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}/cancel`, {
           method: 'POST'
         });
         actionMessage = 'Request cancelled successfully! All associated jobs have been cleaned up.';
       } else {
         // For non-processing requests, use delete endpoint
-        response = await fetch(`http://localhost:8005/queue/${queueRequestId}`, {
+        response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}`, {
           method: 'DELETE'
         });
         actionMessage = 'Request deleted successfully!';

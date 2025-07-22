@@ -943,10 +943,10 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
       // API 호출 - VLLM 생성을 건너뛰는 경우 무조건 큐 배포 사용, 아니면 VLLM 프로젝트 선택 여부에 따라 결정
       const apiEndpoint = skipVllmCreation
-        ? 'http://localhost:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
+        ? 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
         : vllmDeployment.selectedProject
-          ? 'http://localhost:8002/vllm/helm/deploy'  // 프로젝트 선택됨: Helm 배포
-          : 'http://localhost:8005/queue/deployment'; // 프로젝트 선택 안됨: 큐 배포
+          ? 'http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/helm/deploy'  // 프로젝트 선택됨: Helm 배포
+          : 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'; // 프로젝트 선택 안됨: 큐 배포
       
       console.log('Using API endpoint:', apiEndpoint);
       
@@ -1007,7 +1007,7 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleCheckSchedulerStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8002/vllm/queue/scheduler/status');
+      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/status');
       const data = await response.json();
       alert(`큐 스케줄러 상태:\n처리 중: ${data.processing_queue ? 'Yes' : 'No'}\n실행 중: ${data.scheduler_running ? 'Yes' : 'No'}\n${data.message}`);
     } catch (err) {
@@ -1017,7 +1017,7 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleTriggerQueue = async () => {
     try {
-      const response = await fetch('http://localhost:8002/vllm/queue/scheduler/trigger', {
+      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/trigger', {
         method: 'POST'
       });
       const data = await response.json();
@@ -1034,7 +1034,7 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
     }
 
     try {
-      const response = await fetch(`http://localhost:8005/queue/${queueRequestId}`, {
+      const response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

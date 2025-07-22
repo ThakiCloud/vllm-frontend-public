@@ -265,7 +265,7 @@ function VllmQueuePage() {
     try {
       // Try to get logs from deployer API if deployment_id exists
       if (request.deployment_id) {
-        const response = await fetch(`http://localhost:8002/jobs/${request.deployment_id}/logs?namespace=${request.vllm_config?.namespace || 'default'}&tail_lines=1000`);
+        const response = await fetch(`http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/jobs/${request.deployment_id}/logs?namespace=${request.vllm_config?.namespace || 'default'}&tail_lines=1000`);
         if (response.ok) {
           const logData = await response.text();
           setLogs(logData || 'No logs available');
@@ -288,7 +288,7 @@ function VllmQueuePage() {
     setLoadingLogs(true);
     try {
       if (selectedRequestLogs.deployment_id) {
-        const response = await fetch(`http://localhost:8002/jobs/${selectedRequestLogs.deployment_id}/logs?namespace=${selectedRequestLogs.vllm_config?.namespace || 'default'}&tail_lines=1000`);
+        const response = await fetch(`http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/jobs/${selectedRequestLogs.deployment_id}/logs?namespace=${selectedRequestLogs.vllm_config?.namespace || 'default'}&tail_lines=1000`);
         if (response.ok) {
           const logData = await response.text();
           setLogs(logData || 'No logs available');
