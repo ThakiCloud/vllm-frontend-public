@@ -368,5 +368,8 @@ export const vllmManagementApi_functions = {
     vllmManagementApi.get('/configs/validate', { params: { config } }),
 };
 
+// Terminal WebSocket 함수 (별칭)
+export const createTerminalWebSocket = createWebSocketConnection;
+
 // Default export for backward compatibility
 export default benchmarkApi; 
