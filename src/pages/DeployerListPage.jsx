@@ -941,14 +941,10 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       console.log('Scheduling Config:', schedulingConfig);
       console.log('VLLM Helm Config:', vllmHelmConfig);
 
-      // API 호출 - VLLM 생성을 건너뛰는 경우 무조건 큐 배포 사용, 아니면 VLLM 프로젝트 선택 여부에 따라 결정
-              const apiEndpoint = skipVllmCreation
-          ? 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
-          : vllmDeployment.selectedProject
-          ? 'http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/helm/deploy'  // 프로젝트 선택됨: Helm 배포
-          : 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'; // 프로젝트 선택 안됨: 큐 배포
+      // API 호출 - 모든 배포를 큐 기반 시스템으로 통합
+      const apiEndpoint = 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment';
       
-      console.log('Using API endpoint:', apiEndpoint);
+      console.log('Using unified queue API endpoint:', apiEndpoint);
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -973,8 +969,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       // 대화상자는 이미 닫혔으므로 성공 메시지만 표시
       const successMessage = skipVllmCreation 
         ? 'Benchmark jobs added to queue successfully! (기존 VLLM 사용)'
-        : (vllmDeployment.selectedProject && !skipVllmCreation)
-          ? `VLLM Helm deployment successful! Release: ${vllmDeployment.helmConfig.releaseName}`
+        : vllmDeployment.selectedProject
+          ? `VLLM deployment with Helm configuration added to queue successfully! Release: ${vllmDeployment.helmConfig.releaseName}`
           : 'VLLM deployment with benchmark jobs added to queue successfully!';
       alert(successMessage);
       await fetchDeployments();
@@ -1007,9 +1003,9 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleCheckSchedulerStatus = async () => {
     try {
-      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/status');
+      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/scheduler/status');
       const data = await response.json();
-      alert(`큐 스케줄러 상태:\n처리 중: ${data.processing_queue ? 'Yes' : 'No'}\n실행 중: ${data.scheduler_running ? 'Yes' : 'No'}\n${data.message}`);
+      alert(`큐 스케줄러 상태:\n실행 중: ${data.running ? 'Yes' : 'No'}\n폴링 간격: ${data.poll_interval}초\n활성 요청: ${data.active_requests}\n대기 요청: ${data.pending_requests}`);
     } catch (err) {
       alert(`큐 스케줄러 상태 확인 실패: ${err.message}`);
     }
@@ -1017,14 +1013,15 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleTriggerQueue = async () => {
     try {
-      const response = await fetch('http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/queue/scheduler/trigger', {
+      // 스케줄러가 이미 자동으로 실행 중이므로, 수동으로 스케줄러를 재시작합니다
+      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/scheduler/start', {
         method: 'POST'
       });
       const data = await response.json();
-      alert(`큐 처리 트리거 성공: ${data.message}`);
+      alert(`큐 스케줄러 시작: ${data.message}`);
       await fetchDeployments(); // 상태 새로고침
     } catch (err) {
-      alert(`큐 처리 트리거 실패: ${err.message}`);
+      alert(`큐 스케줄러 시작 실패: ${err.message}`);
     }
   };
 
