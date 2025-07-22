@@ -159,43 +159,74 @@ export const modifiedFilesApi = {
 
 // Benchmark Deployer API (신규 배포 및 터미널 관리용)
 export const deployerApi_functions = {
-  // 배포 관리
-  deploy: (yamlContent, namespace = 'default') => 
-    deployerApi.post('/deploy', { yaml_content: yamlContent, namespace }),
+  // VLLM Helm 배포 API
+  deployVllmWithHelm: (vllmConfig, vllmHelmConfig, benchmarkConfigs = [], schedulingConfig = null, priority = 'medium') => 
+    deployerApi.post('/vllm/helm/deploy', {
+      vllm_config: vllmConfig,
+      vllm_helm_config: vllmHelmConfig,
+      benchmark_configs: benchmarkConfigs,
+      scheduling_config: schedulingConfig,
+      priority
+    }),
   
-  deleteDeployment: (yamlContent, namespace = 'default') => 
-    deployerApi.post('/delete', { yaml_content: yamlContent, namespace }),
+  // 기존 큐 기반 배포 (GitHub 토큰 없음)
+  deployVllmToQueue: (vllmConfig, benchmarkConfigs = [], schedulingConfig = null, priority = 'medium', skipVllmCreation = false) => 
+    deployerApi.post('/vllm/queue/deployment', {
+      vllm_config: vllmConfig,
+      benchmark_configs: benchmarkConfigs,
+      scheduling_config: schedulingConfig,
+      priority,
+      skip_vllm_creation: skipVllmCreation
+    }),
   
-  listDeployments: () => deployerApi.get('/deployments'),
+  // 큐 관리
+  getVllmQueueList: () => 
+    deployerApi.get('/vllm/queue/list'),
   
-  // 작업 관리
-  getJobStatus: (jobName, namespace = 'default') => 
-    deployerApi.get(`/jobs/${jobName}/status?namespace=${namespace}`),
+  getVllmQueueStatus: () => 
+    deployerApi.get('/vllm/queue/status'),
   
-  getJobLogs: (jobName, namespace = 'default', lines = 100) => 
-    deployerApi.get(`/jobs/${jobName}/logs?namespace=${namespace}&tail_lines=${lines}`),
+  cancelVllmQueueRequest: (requestId) => 
+    deployerApi.post(`/vllm/queue/${requestId}/cancel`),
   
-  getJobLogsDetailed: (jobName, namespace, tailLines, follow) => 
-    deployerApi.post('/jobs/logs', { job_name: jobName, namespace, tail_lines: tailLines, follow }),
+  changeVllmQueuePriority: (requestId, priority) => 
+    deployerApi.post(`/vllm/queue/${requestId}/priority`, { priority }),
   
-  // 터미널 관리
-  createJobTerminal: (jobName, namespace = 'default', options = {}) => {
-    const payload = {
-      job_name: jobName,
-      namespace,
-      shell: options.shell || '/bin/bash',
-      ...options // pod_name, container_name 등 추가 옵션
-    };
-    return deployerApi.post(`/jobs/${jobName}/terminal`, payload);
-  },
+  // 스케줄러 관리
+  triggerVllmScheduler: () => 
+    deployerApi.post('/vllm/queue/scheduler/trigger'),
   
-  // 시스템 상태
-  getHealth: () => deployerApi.get('/health'),
-  getStatus: () => deployerApi.get('/status'),
+  // 터미널 세션
+  createTerminalSession: () => 
+    deployerApi.post('/terminal/create'),
+  
+  getTerminalSession: (sessionId) => 
+    deployerApi.get(`/terminal/${sessionId}`),
+  
+  deleteTerminalSession: (sessionId) => 
+    deployerApi.delete(`/terminal/${sessionId}`),
+  
+  // WebSocket 연결
+  connectWebSocket: (sessionId, baseUrl = null) => {
+    let wsBaseUrl;
+    
+    if (baseUrl) {
+      wsBaseUrl = baseUrl;
+    } else if (isDevelopment) {
+      wsBaseUrl = 'ws://localhost:8002';
+    } else {
+      // 프로덕션 환경에서는 현재 프로토콜에 따라 ws/wss 결정
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsBaseUrl = `${protocol}//${window.location.host}/deploy`;
+    }
+    
+    const url = `${wsBaseUrl}/terminal/${sessionId}`;
+    return new WebSocket(url);
+  }
 };
 
-// WebSocket 연결 유틸리티
-export const createTerminalWebSocket = (sessionId, baseUrl = null) => {
+// WebSocket 연결 함수 (기존 - 호환성 유지)
+export const createWebSocketConnection = (sessionId, baseUrl = null) => {
   let wsBaseUrl;
   
   if (baseUrl) {
