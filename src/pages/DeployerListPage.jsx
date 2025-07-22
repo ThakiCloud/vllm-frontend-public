@@ -942,9 +942,9 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       console.log('VLLM Helm Config:', vllmHelmConfig);
 
       // API 호출 - VLLM 생성을 건너뛰는 경우 무조건 큐 배포 사용, 아니면 VLLM 프로젝트 선택 여부에 따라 결정
-      const apiEndpoint = skipVllmCreation
-        ? 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
-        : vllmDeployment.selectedProject
+              const apiEndpoint = skipVllmCreation
+          ? 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'  // VLLM 생성 건너뛰기: 항상 큐 배포 사용
+          : vllmDeployment.selectedProject
           ? 'http://benchmark-deployer.benchmark-web.svc.cluster.local:8002/vllm/helm/deploy'  // 프로젝트 선택됨: Helm 배포
           : 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment'; // 프로젝트 선택 안됨: 큐 배포
       

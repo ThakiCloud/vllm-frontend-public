@@ -69,32 +69,52 @@ const VllmManagementPage = () => {
   const [currentDeployments, setCurrentDeployments] = useState([]);
 
   useEffect(() => {
+    console.log('VllmManagementPage: Component mounted, starting data load');
     loadQueueData();
     loadCurrentDeployments();
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
+      console.log('VllmManagementPage: Auto-refresh triggered');
       loadQueueData();
       loadCurrentDeployments();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      console.log('VllmManagementPage: Component unmounted, clearing interval');
+      clearInterval(interval);
+    };
   }, []);
 
   const loadQueueData = async () => {
     try {
+      console.log('VllmManagementPage: loadQueueData called');
       setLoading(true);
       
       // API calls to VLLM Management queue endpoints
+      console.log('VllmManagementPage: Making API calls to benchmark-vllm service');
       const [queueResponse, statusResponse] = await Promise.all([
         fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/list'),
         fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/status')
       ]);
+      
+      console.log('VllmManagementPage: API responses received', {
+        queueStatus: queueResponse.status,
+        statusStatus: statusResponse.status
+      });
 
       if (!queueResponse.ok || !statusResponse.ok) {
-        throw new Error('Failed to fetch queue data');
+        const queueError = !queueResponse.ok ? await queueResponse.text() : '';
+        const statusError = !statusResponse.ok ? await statusResponse.text() : '';
+        console.error('VllmManagementPage: API error', { queueError, statusError });
+        throw new Error(`Failed to fetch queue data: ${queueError || statusError}`);
       }
 
       const queueList = await queueResponse.json();
       const status = await statusResponse.json();
+      
+      console.log('VllmManagementPage: Data received', {
+        queueListLength: queueList.length,
+        status: status
+      });
       
       // 큐 데이터를 상태별로 분리
       const processing = queueList.filter(req => req.status === 'processing');
@@ -112,6 +132,7 @@ const VllmManagementPage = () => {
       setQueueStatus(status);
       setError(null);
     } catch (err) {
+      console.error('VllmManagementPage: Error loading queue data:', err);
       setError(`Failed to load queue data: ${err.message}`);
     } finally {
       setLoading(false);
