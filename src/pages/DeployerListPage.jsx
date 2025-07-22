@@ -53,7 +53,7 @@ import {
   Work as BenchmarkIcon,
 } from '@mui/icons-material';
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import { vllmManagementApi_functions, projectsApi, filesApi } from '../utils/api';
+import { vllmManagementApi_functions, vllmManagementApi, projectsApi, filesApi } from '../utils/api';
 
 const DeployerListPage = () => {
   const navigate = useNavigate();
@@ -941,30 +941,10 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       console.log('Scheduling Config:', schedulingConfig);
       console.log('VLLM Helm Config:', vllmHelmConfig);
 
-      // API 호출 - 모든 배포를 큐 기반 시스템으로 통합
-      const apiEndpoint = 'http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/deployment';
+      // API 호출 - 모든 배포를 큐 기반 시스템으로 통합 (API 유틸리티 사용)
+      const response = await vllmManagementApi.post('/queue/deployment', requestData);
       
-      console.log('Using unified queue API endpoint:', apiEndpoint);
-      
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Deployment success response:', result);
+      console.log('Deployment request sent successfully through API utility:', response.data);
       
       // 대화상자는 이미 닫혔으므로 성공 메시지만 표시
       const successMessage = skipVllmCreation 
@@ -1003,8 +983,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
 
   const handleCheckSchedulerStatus = async () => {
     try {
-      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/scheduler/status');
-      const data = await response.json();
+      const response = await vllmManagementApi_functions.getSchedulerStatus();
+      const data = response.data;
       alert(`큐 스케줄러 상태:\n실행 중: ${data.running ? 'Yes' : 'No'}\n폴링 간격: ${data.poll_interval}초\n활성 요청: ${data.active_requests}\n대기 요청: ${data.pending_requests}`);
     } catch (err) {
       alert(`큐 스케줄러 상태 확인 실패: ${err.message}`);
@@ -1014,10 +994,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
   const handleTriggerQueue = async () => {
     try {
       // 스케줄러가 이미 자동으로 실행 중이므로, 수동으로 스케줄러를 재시작합니다
-      const response = await fetch('http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/scheduler/start', {
-        method: 'POST'
-      });
-      const data = await response.json();
+      const response = await vllmManagementApi_functions.startScheduler();
+      const data = response.data;
       alert(`큐 스케줄러 시작: ${data.message}`);
       await fetchDeployments(); // 상태 새로고침
     } catch (err) {
@@ -1031,22 +1009,16 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
     }
 
     try {
-      const response = await fetch(`http://benchmark-vllm.benchmark-web.svc.cluster.local:8005/queue/${queueRequestId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+      const response = await vllmManagementApi_functions.deleteQueueRequest(queueRequestId);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to delete queue request');
+      if (response.data?.detail) {
+        alert(response.data.detail);
+      } else {
+        alert('큐 요청이 성공적으로 삭제되었습니다.');
       }
-
-      alert('큐 요청이 성공적으로 삭제되었습니다.');
       await fetchDeployments(); // 목록 새로고침
     } catch (err) {
-      alert(`큐 요청 삭제 실패: ${err.message}`);
+      alert(`큐 요청 삭제 실패: ${err.response?.data?.detail || err.message}`);
     }
   };
 
