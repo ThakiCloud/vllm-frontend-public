@@ -53,7 +53,7 @@ import {
   Work as BenchmarkIcon,
 } from '@mui/icons-material';
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import { vllmManagementApi_functions, vllmManagementApi, projectsApi, filesApi } from '../utils/api';
+import { vllmManagementApi_functions, vllmManagementApi, projectsApi, filesApi, deployerApi_functions } from '../utils/api';
 
 const DeployerListPage = () => {
   const navigate = useNavigate();
@@ -941,8 +941,14 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
       console.log('Scheduling Config:', schedulingConfig);
       console.log('VLLM Helm Config:', vllmHelmConfig);
 
-      // API 호출 - 모든 배포를 큐 기반 시스템으로 통합 (API 유틸리티 사용)
-      const response = await vllmManagementApi.post('/queue/deployment', requestData);
+      // API 호출 - Deployer를 통한 Helm 배포 (custom values 지원)
+      const response = await deployerApi_functions.deployVllmWithHelm(
+        finalVllmConfig, // vllmConfig
+        vllmHelmConfig,  // vllmHelmConfig (custom values 포함)
+        benchmarkConfigs, // benchmarkConfigs
+        schedulingConfig, // schedulingConfig
+        priority // priority
+      );
       
       console.log('Deployment request sent successfully through API utility:', response.data);
       
