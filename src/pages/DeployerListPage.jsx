@@ -947,7 +947,8 @@ ${configContent.split('\n').map(line => `    ${line}`).join('\n')}`;
         vllmHelmConfig,  // vllmHelmConfig (custom values 포함)
         benchmarkConfigs, // benchmarkConfigs
         schedulingConfig, // schedulingConfig
-        priority // priority
+        priority, // priority
+        skipVllmCreation // skipVllmCreation - 중요한 플래그!
       );
       
       console.log('Deployment request sent successfully through API utility:', response.data);

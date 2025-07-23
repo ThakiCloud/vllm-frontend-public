@@ -160,13 +160,14 @@ export const modifiedFilesApi = {
 // Benchmark Deployer API (신규 배포 및 터미널 관리용)
 export const deployerApi_functions = {
   // VLLM Helm 배포 API
-  deployVllmWithHelm: (vllmConfig, vllmHelmConfig, benchmarkConfigs = [], schedulingConfig = null, priority = 'medium') => 
+  deployVllmWithHelm: (vllmConfig, vllmHelmConfig, benchmarkConfigs = [], schedulingConfig = null, priority = 'medium', skipVllmCreation = false) => 
     deployerApi.post('/vllm/helm/deploy', {
       vllm_config: vllmConfig,
       vllm_helm_config: vllmHelmConfig,
       benchmark_configs: benchmarkConfigs,
       scheduling_config: schedulingConfig,
-      priority
+      priority,
+      skip_vllm_creation: skipVllmCreation
     }),
   
   // 기존 큐 기반 배포 (GitHub 토큰 없음)
