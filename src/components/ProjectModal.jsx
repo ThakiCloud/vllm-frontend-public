@@ -85,10 +85,7 @@ function ProjectModal({ open, onClose, project = null }) {
       newErrors.name = 'Project name is required';
     }
     
-    if (!formData.repository_url.trim()) {
-      newErrors.repository_url = 'Repository URL is required';
-    } else {
-      // GitHub URL validation - 더 유연하게 변경
+    if (formData.repository_url.trim()) {
       const githubPattern = /github\.com\/[\w.-]+\/[\w.-]+/;
       const cleanUrl = formData.repository_url.replace(/^@/, '').replace(/\.git$/, '');
       if (!githubPattern.test(cleanUrl)) {
@@ -237,7 +234,6 @@ function ProjectModal({ open, onClose, project = null }) {
             error={Boolean(errors.repository_url)}
             helperText={errors.repository_url || 'Supports: @https://github.com/user/repo.git, https://github.com/user/repo, user/repo'}
             fullWidth
-            required
             placeholder="@https://github.com/username/repository.git"
           />
           
@@ -250,7 +246,6 @@ function ProjectModal({ open, onClose, project = null }) {
             error={Boolean(errors.github_token)}
             helperText={errors.github_token || 'Personal access token with repo permissions'}
             fullWidth
-            required
           />
           
           {formData.project_type === 'benchmark' && (

@@ -551,7 +551,7 @@ function ProjectDetailPage() {
               </Button>
             </Box>
 
-            {files.config?.length === 0 ? (
+            {getCombinedFiles('config').length === 0 ? (
               <Box textAlign="center" py={4}>
                 <Typography variant="body1" color="text.secondary" gutterBottom>
                   No config files found

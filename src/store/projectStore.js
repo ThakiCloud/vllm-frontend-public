@@ -59,7 +59,8 @@ export const useProjectStore = create((set, get) => ({
     for (const project of projects) {
       // 이미 failed 상태인 프로젝트는 건너뛰기
       const currentSyncState = get().getProjectSyncState(project.project_id);
-      if (currentSyncState === 'failed') {
+      if (currentSyncState === 'failed' || project.repository_url === '') {
+        get().clearProjectSyncState(project.project_id, 'synced');
         continue;
       }
       
