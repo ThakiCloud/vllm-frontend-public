@@ -27,7 +27,6 @@ function ProjectModal({ open, onClose, project = null }) {
     config_path: 'config/',
     job_path: 'job/',
     vllm_values_path: '',
-    polling_interval: 86400,
   });
   const [errors, setErrors] = useState({});
   
@@ -45,7 +44,6 @@ function ProjectModal({ open, onClose, project = null }) {
         config_path: project.config_path || 'config/',
         job_path: project.job_path || 'job/',
         vllm_values_path: project.vllm_values_path || '',
-        polling_interval: project.polling_interval || 300,
       });
     } else {
       setFormData({
@@ -56,7 +54,6 @@ function ProjectModal({ open, onClose, project = null }) {
         config_path: 'config/',
         job_path: 'job/',
         vllm_values_path: '',
-        polling_interval: 300,
       });
     }
     setErrors({});
@@ -93,10 +90,6 @@ function ProjectModal({ open, onClose, project = null }) {
       }
     }
     
-    if (!formData.github_token.trim()) {
-      newErrors.github_token = 'GitHub token is required';
-    }
-    
     if (formData.project_type === 'benchmark') {
       if (!formData.config_path.trim()) {
         newErrors.config_path = 'Config path is required';
@@ -111,9 +104,7 @@ function ProjectModal({ open, onClose, project = null }) {
       }
     }
     
-    if (formData.polling_interval < 60) {
-      newErrors.polling_interval = 'Polling interval must be at least 60 seconds';
-    }
+
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -169,7 +160,6 @@ function ProjectModal({ open, onClose, project = null }) {
       config_path: 'config/',
       job_path: 'job/',
       vllm_values_path: '',
-      polling_interval: 300,
     });
     setErrors({});
     onClose();
@@ -287,18 +277,7 @@ function ProjectModal({ open, onClose, project = null }) {
               placeholder="charts/"
             />
           )}
-          
-          <TextField
-            name="polling_interval"
-            label="Polling Interval (seconds)"
-            type="number"
-            value={formData.polling_interval}
-            onChange={handleChange}
-            error={Boolean(errors.polling_interval)}
-            helperText={errors.polling_interval || 'How often to check for updates (minimum 60 seconds)'}
-            fullWidth
-            inputProps={{ min: 60 }}
-          />
+
         </Box>
       </DialogContent>
       

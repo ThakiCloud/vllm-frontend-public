@@ -46,43 +46,8 @@ export const useProjectStore = create((set, get) => ({
     try {
       const response = await projectsApi.list();
       set({ projects: response.data, loading: false });
-      
-      // 백그라운드에서 각 프로젝트의 sync 상태 검증
-      get().validateProjectSyncStates(response.data);
     } catch (error) {
       set({ error: error.message, loading: false });
-    }
-  },
-
-  // 각 프로젝트의 sync 상태를 백그라운드에서 검증
-  validateProjectSyncStates: async (projects) => {
-    for (const project of projects) {
-      // 이미 failed 상태인 프로젝트는 건너뛰기
-      const currentSyncState = get().getProjectSyncState(project.project_id);
-      if (currentSyncState === 'failed' || project.repository_url === '') {
-        get().clearProjectSyncState(project.project_id, 'synced');
-        continue;
-      }
-      
-      try {
-        // 각 프로젝트에 대해 sync 시도 (실제로는 상태만 확인)
-        const syncResponse = await projectsApi.sync(project.project_id);
-        const syncedFilesCount = syncResponse.data?.synced_files || 0;
-        
-        if (syncedFilesCount === 0) {
-          // 동기화된 파일이 없으면 failed로 설정
-          get().setProjectSyncState(project.project_id, 'failed');
-        } else {
-          // 성공적으로 동기화된 경우, 기존 상태 유지 (pending -> synced로 자연스럽게)
-          get().clearProjectSyncState(project.project_id);
-        }
-      } catch (error) {
-        // sync 실패 시 failed 상태로 설정
-        get().setProjectSyncState(project.project_id, 'failed');
-      }
-      
-      // 서버 부하 방지를 위해 각 요청 간 잠시 대기
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
   },
 
@@ -116,7 +81,7 @@ export const useProjectStore = create((set, get) => ({
     try {
       // Global sync state: syncing
       get().setProjectSyncState(id, 'syncing');
-      
+
       // 1. 프로젝트 정보 업데이트
       const response = await projectsApi.update(id, projectData);
       
@@ -126,8 +91,9 @@ export const useProjectStore = create((set, get) => ({
       // 백엔드에서 동기화된 파일 개수 확인
       const syncedFilesCount = syncResponse.data?.synced_files || 0;
       
-      // 동기화된 파일이 없으면 실패로 처리 (프로젝트 정보 새로고침 전에 체크)
-      if (syncedFilesCount === 0) {
+      // GitHub repo가 있는 경우에만 파일 개수 검증
+      const hasGitHubRepo = projectData?.repository_url?.trim();
+      if (hasGitHubRepo && syncedFilesCount === 0) {
         throw new Error('Repository sync failed: No files found in the repository. Please check if the repository URL is correct and accessible.');
       }
       
@@ -185,13 +151,21 @@ export const useProjectStore = create((set, get) => ({
       // Global sync state: syncing
       get().setProjectSyncState(id, 'syncing');
       
+      // 프로젝트 정보 확인 (GitHub repo가 없는 경우 체크)
+      const currentProject = get().currentProject?.project_id === id ? 
+        get().currentProject : 
+        get().projects.find(p => p.project_id === id);
+      
+      const project = currentProject?.project || currentProject;
+      const hasGitHubRepo = project?.repository_url?.trim();
+      
       const response = await projectsApi.sync(id);
       
-      // 백엔드에서 동기화된 파일 개수 확인 (updateProject와 동일한 검증)
+      // 백엔드에서 동기화된 파일 개수 확인
       const syncedFilesCount = response.data?.synced_files || 0;
       
-      // 동기화된 파일이 없으면 실패로 처리
-      if (syncedFilesCount === 0) {
+      // GitHub repo가 있는 경우에만 파일 개수 검증
+      if (hasGitHubRepo && syncedFilesCount === 0) {
         throw new Error('Repository sync failed: No files found in the repository. Please check if the repository URL is correct and accessible.');
       }
       
